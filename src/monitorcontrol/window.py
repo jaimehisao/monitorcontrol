@@ -65,9 +65,19 @@ class ControlWindow(Adw.ApplicationWindow):
         self._stack.add_named(scrolled, "list")
         self._stack.add_named(self._status, "empty")
 
+        self._sync = Adw.SwitchRow(
+            title="Sync displays",
+            subtitle="One slider sets every monitor that has that control",
+        )
+        self._sync.set_active(controller.sync)
+        self._sync.connect("notify::active", self._on_sync)
+        sync_group = Adw.PreferencesGroup()
+        sync_group.add(self._sync)
+
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         content.append(self._banner)
         content.append(self._stack)
+        content.append(sync_group)
         toolbar.set_content(content)
         self.set_content(toolbar)
         self.rebuild()
@@ -161,6 +171,9 @@ class ControlWindow(Adw.ApplicationWindow):
                 self._percent_labels[key].set_text(f"{percent}%")
         finally:
             self._updating = False
+
+    def _on_sync(self, row: Adw.SwitchRow, _pspec: object) -> None:
+        self.controller.sync = bool(row.get_active())
 
     def _on_refresh(self, _button: Gtk.Button) -> None:
         self.controller.refresh()

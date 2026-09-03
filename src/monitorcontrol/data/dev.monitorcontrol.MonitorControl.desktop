@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MonitorControl
+Comment=Control brightness, contrast, and volume on any DDC/CI or laptop display
+Exec=monitorcontrol
+Icon=dev.monitorcontrol.MonitorControl
+Terminal=false
+Categories=GTK;Settings;HardwareSettings;
+Keywords=brightness;ddc;monitor;display;volume;contrast;
+StartupNotify=true
+DBusActivatable=false
