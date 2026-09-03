@@ -92,6 +92,22 @@ class ControllerTests(unittest.TestCase):
         self.ctrl.adjust(Feature.BRIGHTNESS, +5, identity=self.dell.identity, immediate=True)
         self.assertEqual(seen, [45])
 
+    def test_scheduler_and_close(self) -> None:
+        from monitorcontrol.controller import Scheduler
+
+        ctrl = Controller(
+            discover_fn=lambda: [self.dell],
+            scheduler=Scheduler(),
+            flush_delay_s=5,
+        )
+        ctrl.refresh()
+        ctrl.adjust(Feature.BRIGHTNESS, +1)
+        with self.assertRaises(KeyError):
+            ctrl.find("nope")
+        ctrl.close()
+        self.assertEqual(ctrl.displays, [])
+        ctrl._notify([])
+
     def test_clamps_at_zero_and_hundred(self) -> None:
         self.ctrl.adjust(Feature.BRIGHTNESS, -100, immediate=True)
         self.assertEqual(self.dell.features[Feature.BRIGHTNESS].percent, 0)

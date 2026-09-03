@@ -30,6 +30,7 @@ class ControlWindow(Adw.ApplicationWindow):
         super().__init__(application=application, title="MonitorControl")
         self.set_default_size(400, 280)
         self.controller = controller
+        self.on_settings = None
         self._scales: dict[tuple[str, Feature], Gtk.Scale] = {}
         self._percent_labels: dict[tuple[str, Feature], Gtk.Label] = {}
         self._updating = False
@@ -40,7 +41,12 @@ class ControlWindow(Adw.ApplicationWindow):
         refresh.set_tooltip_text("Rescan displays")
         refresh.connect("clicked", self._on_refresh)
         header.pack_start(refresh)
+        settings_btn = Gtk.Button.new_from_icon_name("emblem-system-symbolic")
+        settings_btn.set_tooltip_text("Settings")
+        settings_btn.connect("clicked", self._on_settings)
+        header.pack_end(settings_btn)
         toolbar.add_top_bar(header)
+        self.set_hide_on_close(True)
 
         self._banner = Adw.Banner()
         self._banner.set_button_label("Copy setup commands")
@@ -174,6 +180,10 @@ class ControlWindow(Adw.ApplicationWindow):
 
     def _on_sync(self, row: Adw.SwitchRow, _pspec: object) -> None:
         self.controller.sync = bool(row.get_active())
+
+    def _on_settings(self, _button: Gtk.Button) -> None:
+        if self.on_settings is not None:
+            self.on_settings()
 
     def _on_refresh(self, _button: Gtk.Button) -> None:
         self.controller.refresh()

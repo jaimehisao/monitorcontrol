@@ -33,4 +33,13 @@ Homepage = "https://github.com/MonitorControl/MonitorControl"
 where = ["src"]
 
 [tool.setuptools.package-data]
-monitorcontrol = ["data/*"]
+monitorcontrol = ["data/*", "data/gnome-extension/*"]
+
+[tool.coverage.run]
+source = ["src/monitorcontrol"]
+omit = ["src/monitorcontrol/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_empty = true

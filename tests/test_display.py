@@ -141,6 +141,50 @@ class DiscoverTests(unittest.TestCase):
         self.assertEqual(hdmi.name, "U2720Q")
 
 
+class DisplayObjectTests(unittest.TestCase):
+    def test_get_refresh_close_and_percent(self) -> None:
+        from monitorcontrol.display import BackendKind, Display, FeatureState
+        from monitorcontrol.vcp import Feature
+
+        reads = {"n": 0}
+
+        def refresh(feature: Feature) -> FeatureState:
+            reads["n"] += 1
+            return FeatureState(3, 10)
+
+        closed = []
+        display = Display(
+            identity="x",
+            name="x",
+            connector_sys_name="",
+            connector_type="HDMI-A",
+            kind=BackendKind.DDC,
+            features={Feature.BRIGHTNESS: FeatureState(1, 10)},
+            warning="heads up",
+            _set=lambda _f, _v: None,
+            _refresh=refresh,
+            _close=lambda: closed.append(True),
+        )
+        self.assertEqual(display.get(Feature.BRIGHTNESS).current, 3)
+        self.assertEqual(reads["n"], 1)
+        display.close()
+        display.close()
+        self.assertEqual(closed, [True])
+        with self.assertRaises(KeyError):
+            display.get(Feature.CONTRAST)
+
+    def test_open_linux_permission(self) -> None:
+        from monitorcontrol.ddc import DdcError, DdcPermissionError
+        from monitorcontrol.display import _open_linux
+        from unittest.mock import patch
+
+        with patch("monitorcontrol.i2c.LinuxI2cTransport", side_effect=DdcPermissionError("x")):
+            with self.assertRaises(DdcPermissionError):
+                _open_linux(1)
+        with patch("monitorcontrol.i2c.LinuxI2cTransport", side_effect=DdcError("no")):
+            self.assertIsNone(_open_linux(1))
+
+
 class IsolatedDiscoverTests(unittest.TestCase):
     def test_ddc_without_drm_still_shows_up(self) -> None:
         with TemporaryDirectory() as raw:

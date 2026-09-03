@@ -44,8 +44,20 @@ class WindowSmokeTests(unittest.TestCase):
         window = ControlWindow(app, controller)
         self.assertEqual(window.get_title(), "MonitorControl")
         self.assertEqual(len(window._scales), 2)
-        self.assertIn(( "DEL:U2720Q:AA", Feature.BRIGHTNESS), window._scales)
+        self.assertIn(("DEL:U2720Q:AA", Feature.BRIGHTNESS), window._scales)
+        called = []
+        window.on_settings = lambda: called.append(True)
+        window._on_settings(None)
+        self.assertEqual(called, [True])
+        scale = window._scales[("DEL:U2720Q:AA", Feature.BRIGHTNESS)]
+        scale.set_value(22)
+        empty = Controller(discover_fn=lambda: [])
+        empty.refresh()
+        window2 = ControlWindow(app, empty)
+        self.assertEqual(window2._stack.get_visible_child_name(), "empty")
+        window._on_copy_setup(window._banner)
         window.destroy()
+        window2.destroy()
 
 
 if __name__ == "__main__":

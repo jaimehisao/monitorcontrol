@@ -87,6 +87,64 @@ class RunTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             run(["--display", "nope", "brightness", "up"], controller=self.ctrl, out=self.out)
 
+    def test_get_and_empty_and_bad_value(self) -> None:
+        run(["brightness"], controller=self.ctrl, out=self.out)
+        self.assertIn("U2720Q: 40%", self.out.getvalue())
+        empty = Controller(discover_fn=lambda: [])
+        empty.refresh()
+        out = io.StringIO()
+        self.assertEqual(run(["list"], controller=empty, out=out), 1)
+        self.assertIn("No displays", out.getvalue())
+        with self.assertRaises(SystemExit):
+            run(["brightness", "nope"], controller=self.ctrl, out=self.out)
+
+    def test_shortcuts_and_extension(self) -> None:
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        from monitorcontrol.shortcuts import MemoryShortcutStore
+
+        store = MemoryShortcutStore()
+        out = io.StringIO()
+        self.assertEqual(
+            run(
+                ["shortcuts", "status"],
+                controller=self.ctrl,
+                out=out,
+                shortcut_store=store,
+                program="mc",
+            ),
+            1,
+        )
+        run(["shortcuts", "install"], controller=self.ctrl, out=out, shortcut_store=store, program="mc")
+        self.assertEqual(
+            run(["shortcuts", "status"], controller=self.ctrl, out=out, shortcut_store=store, program="mc"),
+            0,
+        )
+        run(["shortcuts", "uninstall"], controller=self.ctrl, out=out, shortcut_store=store, program="mc")
+        with TemporaryDirectory() as raw:
+            dest = Path(raw)
+            run(["extension", "install"], controller=self.ctrl, out=out, extension_root=dest)
+            self.assertEqual(
+                run(["extension", "status"], controller=self.ctrl, out=out, extension_root=dest),
+                0,
+            )
+            run(["extension", "uninstall"], controller=self.ctrl, out=out, extension_root=dest)
+            self.assertEqual(
+                run(["extension", "status"], controller=self.ctrl, out=out, extension_root=dest),
+                1,
+            )
+
+    def test_service_client_path(self) -> None:
+        from monitorcontrol.dbus import JsonClient, dispatch
+        from monitorcontrol.service import MonitorService
+
+        svc = MonitorService(self.ctrl)
+        client = JsonClient(lambda method, args: dispatch(svc, method, args))
+        out = io.StringIO()
+        run(["brightness", "down"], service=client, out=out)
+        self.assertIn("U2720Q: 35%", out.getvalue())
+
     def test_gui_uses_launcher_hook(self) -> None:
         called = []
         code = run(["gui"], controller=self.ctrl, out=self.out, launch_gui=lambda: called.append(1) or 0)
