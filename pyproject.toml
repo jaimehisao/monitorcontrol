@@ -23,6 +23,9 @@ classifiers = [
 # PyGObject / GTK4 / libadwaita come from the distro, not PyPI.
 dependencies = []
 
+[project.scripts]
+monitorcontrol = "monitorcontrol.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/MonitorControl/MonitorControl"
 
