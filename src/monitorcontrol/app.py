@@ -9,7 +9,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gdk, Gio, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from monitorcontrol import APP_ID, APP_NAME
 from monitorcontrol.controller import Controller
@@ -34,7 +34,7 @@ class Application(Adw.Application):
             application_id=APP_ID,
             flags=Gio.ApplicationFlags.FLAGS_NONE,
         )
-        self.set_application_name(APP_NAME)
+        GLib.set_application_name(APP_NAME)
         self.controller: Controller | None = None
         self.win: ControlWindow | None = None
         self.osd: Osd | None = None
