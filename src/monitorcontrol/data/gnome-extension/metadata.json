@@ -1,0 +1,8 @@
+{
+  "uuid": "monitorcontrol@monitorcontrol.dev",
+  "name": "MonitorControl",
+  "description": "Brightness sliders for external DDC/CI displays in GNOME Quick Settings, talking to the MonitorControl daemon.",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "session-modes": ["user"],
+  "url": "https://github.com/MonitorControl/MonitorControl"
+}
