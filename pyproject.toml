@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "monitorcontrol"
+version = "0.1.0"
+description = "Control external display brightness and volume on Linux as if they were native."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "MonitorControl for Linux contributors" }]
+keywords = ["ddc", "ddc-ci", "brightness", "monitor", "display"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: GTK",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Desktop Environment",
+]
+# PyGObject / GTK4 / libadwaita come from the distro, not PyPI.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/MonitorControl/MonitorControl"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+monitorcontrol = ["data/*"]
