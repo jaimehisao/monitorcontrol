@@ -8,7 +8,10 @@ the bytes can be tested without a monitor.
 from __future__ import annotations
 
 import struct
+import threading
+import time
 from dataclasses import dataclass
+from typing import Callable, Protocol
 
 HOST_ADDRESS = 0x51
 DDCCI_ADDR = 0x37
@@ -26,6 +29,10 @@ CMD_RATE_S = 0.05
 
 class DdcError(Exception):
     """A DDC/CI request failed or the reply was garbage."""
+
+
+class DdcPermissionError(DdcError):
+    """Opened an I2C node the user is not allowed to use."""
 
 
 def checksum(data: bytes) -> int:
@@ -110,3 +117,67 @@ def decode_get_vcp_reply(packet: bytes, expected_code: int) -> VcpReply:
             f"DDC opcode mismatch: asked 0x{expected_code:02x}, got 0x{opcode:02x}"
         )
     return VcpReply(code=opcode, current=current, maximum=maximum, vcp_type=vcp_type)
+
+
+class Transport(Protocol):
+    def write(self, data: bytes) -> None: ...
+    def read(self, n: int) -> bytes: ...
+    def close(self) -> None: ...
+
+
+class DdcClient:
+    """One DDC/CI endpoint (usually one physical monitor)."""
+
+    def __init__(
+        self,
+        transport: Transport,
+        *,
+        sleep: Callable[[float], None] = time.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._transport = transport
+        self._sleep = sleep
+        self._monotonic = monotonic
+        self._last = 0.0
+        self._lock = threading.Lock()
+
+    def close(self) -> None:
+        self._transport.close()
+
+    def __enter__(self) -> DdcClient:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+    def _pace(self) -> None:
+        wait = CMD_RATE_S - (self._monotonic() - self._last)
+        if wait > 0:
+            self._sleep(wait)
+
+    def get(self, code: int) -> VcpReply:
+        with self._lock:
+            self._pace()
+            self._transport.write(encode_get_vcp(code))
+            self._sleep(GET_VCP_TIMEOUT_S)
+            raw = self._transport.read(11)
+            self._last = self._monotonic()
+            return decode_get_vcp_reply(raw, code)
+
+    def set(self, code: int, value: int) -> None:
+        with self._lock:
+            self._pace()
+            self._transport.write(encode_set_vcp(code, value))
+            self._last = self._monotonic()
+
+    def probe(self, codes: tuple[int, ...] | None = None) -> dict[int, VcpReply]:
+        """Return the subset of `codes` this display actually implements."""
+        from monitorcontrol.vcp import USER_FEATURES
+
+        found: dict[int, VcpReply] = {}
+        for code in codes if codes is not None else USER_FEATURES:
+            try:
+                found[int(code)] = self.get(int(code))
+            except DdcError:
+                continue
+        return found
