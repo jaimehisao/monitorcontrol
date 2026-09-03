@@ -1,0 +1,30 @@
+.display-card {
+  padding: 4px 0;
+}
+
+.feature-row {
+  padding: 4px 0;
+}
+
+.percent-label {
+  min-width: 3.5em;
+  font-feature-settings: "tnum";
+}
+
+.warning-label {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.osd-window {
+  background-color: alpha(black, 0.82);
+  border-radius: 18px;
+  padding: 18px 22px;
+  min-width: 240px;
+}
+
+.osd-window .osd-percent {
+  font-size: 1.1em;
+  font-weight: 600;
+  font-feature-settings: "tnum";
+}
