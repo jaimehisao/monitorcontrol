@@ -74,6 +74,7 @@ class Display:
     _refresh: Callable[[Feature], FeatureState] | None = field(
         default=None, repr=False, compare=False
     )
+    _close: Callable[[], None] | None = field(default=None, repr=False, compare=False)
 
     def get(self, feature: Feature) -> FeatureState:
         if feature not in self.features:
@@ -102,6 +103,11 @@ class Display:
     @property
     def controllable(self) -> bool:
         return self.kind is not BackendKind.NONE and bool(self.features)
+
+    def close(self) -> None:
+        if self._close is not None:
+            self._close()
+            self._close = None
 
 
 def _bus_from_ddc_symlink(connector_path: Path) -> int | None:
@@ -209,6 +215,7 @@ def _ddc_display(
         bus_number=bus_number,
         _set=setter,
         _refresh=refresh,
+        _close=client.close,
     )
 
 
