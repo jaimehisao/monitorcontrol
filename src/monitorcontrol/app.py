@@ -13,6 +13,7 @@ from gi.repository import Adw, Gdk, Gio, Gtk  # noqa: E402
 
 from monitorcontrol import APP_ID, APP_NAME
 from monitorcontrol.controller import Controller
+from monitorcontrol.osd import Osd
 from monitorcontrol.window import ControlWindow
 
 
@@ -36,6 +37,7 @@ class Application(Adw.Application):
         self.set_application_name(APP_NAME)
         self.controller: Controller | None = None
         self.win: ControlWindow | None = None
+        self.osd: Osd | None = None
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
@@ -47,6 +49,8 @@ class Application(Adw.Application):
         if self.win is None:
             assert self.controller is not None
             self.win = ControlWindow(self, self.controller)
+            self.osd = Osd(self)
+            self.controller.subscribe(self.osd.show_changes)
         self.win.present()
 
     def do_shutdown(self) -> None:

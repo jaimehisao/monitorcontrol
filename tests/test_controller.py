@@ -86,6 +86,12 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(self.lg.features[Feature.BRIGHTNESS].percent, 60)
         self.assertEqual(self.dell.writes, [])
 
+    def test_subscribe_sees_adjust(self) -> None:
+        seen: list[int] = []
+        self.ctrl.subscribe(lambda changes: seen.append(changes[0].state.percent))
+        self.ctrl.adjust(Feature.BRIGHTNESS, +5, identity=self.dell.identity, immediate=True)
+        self.assertEqual(seen, [45])
+
     def test_clamps_at_zero_and_hundred(self) -> None:
         self.ctrl.adjust(Feature.BRIGHTNESS, -100, immediate=True)
         self.assertEqual(self.dell.features[Feature.BRIGHTNESS].percent, 0)

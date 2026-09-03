@@ -143,7 +143,9 @@ class ControlWindow(Adw.ApplicationWindow):
         if self._updating:
             return
         percent = int(round(scale.get_value()))
-        changes = self.controller.set_percent(display.identity, feature, percent)
+        changes = self.controller.set_percent(
+            display.identity, feature, percent, notify=False
+        )
         self._updating = True
         try:
             for change in changes:

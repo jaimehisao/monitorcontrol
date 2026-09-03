@@ -55,6 +55,16 @@ class Controller:
         self._pending: dict[tuple[str, Feature], int] = {}
         self._flush_handle: object | None = None
         self._lock = threading.Lock()
+        self._listeners: list[Callable[[list[Change]], None]] = []
+
+    def subscribe(self, fn: Callable[[list[Change]], None]) -> None:
+        self._listeners.append(fn)
+
+    def _notify(self, changes: list[Change]) -> None:
+        if not changes:
+            return
+        for fn in list(self._listeners):
+            fn(changes)
 
     def refresh(self) -> list[Display]:
         with self._lock:
@@ -96,6 +106,7 @@ class Controller:
         *,
         immediate: bool = False,
         propagate: bool | None = None,
+        notify: bool = True,
     ) -> list[Change]:
         identities = [identity]
         sync = self.sync if propagate is None else propagate
@@ -117,6 +128,8 @@ class Controller:
                 self._flush_locked()
             else:
                 self._arm_flush()
+        if notify:
+            self._notify(changes)
         return changes
 
     def adjust(
