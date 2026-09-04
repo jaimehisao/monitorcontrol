@@ -17,13 +17,17 @@ class ConfigTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_roundtrip(self) -> None:
-        save(Config(step=7, sync=True, autostart=True, shortcuts=True), self.path)
+        save(
+            Config(step=7, sync=True, autostart=True, shortcuts=True, setup_complete=True),
+            self.path,
+        )
         loaded = load(self.path)
         self.assertEqual(loaded.step, 7)
         self.assertTrue(loaded.sync)
         self.assertTrue(loaded.autostart)
         self.assertTrue(loaded.shortcuts)
         self.assertFalse(loaded.volume_keys)
+        self.assertTrue(loaded.setup_complete)
 
     def test_missing_file_is_defaults(self) -> None:
         self.assertEqual(load(self.path), Config())
