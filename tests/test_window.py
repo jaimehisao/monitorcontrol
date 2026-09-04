@@ -55,7 +55,9 @@ class WindowSmokeTests(unittest.TestCase):
         empty.refresh()
         window2 = ControlWindow(app, empty)
         self.assertEqual(window2._stack.get_visible_child_name(), "empty")
-        window._on_copy_setup(window._banner)
+        window.on_setup = lambda: called.append("setup")
+        window._on_banner(window._banner)
+        self.assertIn("setup", called)
         window.destroy()
         window2.destroy()
 
