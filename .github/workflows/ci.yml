@@ -27,7 +27,10 @@ jobs:
             python3-venv \
             gir1.2-gtk-4.0 \
             gir1.2-adw-1 \
-            xvfb
+            libgtk-4-1 \
+            libadwaita-1-0 \
+            xvfb \
+            binutils
 
       - name: Virtualenv with system GI modules
         run: |
@@ -46,3 +49,43 @@ jobs:
         run: |
           xvfb-run -a .venv/bin/coverage run --source=src/monitorcontrol -m unittest discover -s tests
           .venv/bin/coverage report
+
+  binary:
+    name: Standalone binary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK, PyGObject, PyInstaller deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi \
+            python3-gi-cairo \
+            python3-pip \
+            python3-venv \
+            gir1.2-gtk-4.0 \
+            gir1.2-adw-1 \
+            libgtk-4-1 \
+            libadwaita-1-0 \
+            xvfb \
+            binutils \
+            file
+
+      - name: Build one-file binary
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install pyinstaller
+          .venv/bin/python -m PyInstaller pack/monitorcontrol.spec \
+            --noconfirm \
+            --distpath build/pyinstaller \
+            --workpath build/pyinstaller-work
+          file build/pyinstaller/monitorcontrol
+          xvfb-run -a build/pyinstaller/monitorcontrol --help
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitorcontrol-linux
+          path: build/pyinstaller/monitorcontrol

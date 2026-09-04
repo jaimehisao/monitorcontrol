@@ -13,15 +13,16 @@ already puts brightness.
 Binaries and pip packages are attached to [GitHub Releases](https://github.com/jaimehisao/monitorcontrol/releases).
 
 ```bash
-# single-file executable (needs system GTK 4 / libadwaita / PyGObject)
 chmod +x monitorcontrol-*-linux
-./monitorcontrol-*-linux list
-
-# or pip
-pip install monitorcontrol-*-py3-none-any.whl
+./monitorcontrol-*-linux
 ```
 
-Publish a release by pushing a version tag that matches `pyproject.toml`:
+First launch is meant to just work: one admin prompt grants display
+control for this session (no log out), then brightness keys, autostart,
+and the GNOME Quick Settings slider are turned on.
+
+Publish a release by pushing a version tag that matches `pyproject.toml`
+from a PR, not from a direct push to `main`:
 
 ```bash
 git tag v0.1.0
@@ -38,15 +39,14 @@ On GNOME 49+, the Quick Settings brightness slider is backed by Mutter.
 A desktop with only an HDMI/DP monitor has **no kernel backlight**, so
 that slider is missing. This app fills the same slot:
 
-1. Run the daemon at login (`Launch at login` in Settings, or
-   `monitorcontrol --background`).
-2. Bind the hardware brightness keys:
-   `PYTHONPATH=src python3 -m monitorcontrol shortcuts install`
-3. Install the Shell extension so a `QuickSlider` shows up in the same
-   Quick Settings menu Fedora already uses:
-   `PYTHONPATH=src python3 -m monitorcontrol extension install`
-   then `gnome-extensions enable monitorcontrol@monitorcontrol.dev`
-   (Wayland usually wants a log out).
+On first run the app does this itself (Continue in the setup dialog).
+If you skipped that, use Settings or:
+
+```bash
+monitorcontrol shortcuts install
+monitorcontrol extension install
+gnome-extensions enable monitorcontrol@monitorcontrol.dev
+```
 
 If you *do* have a laptop panel, GNOME's own slider still works. We
 watch Mutter's `Backlight` property and copy that percent onto every
@@ -86,15 +86,10 @@ OSD can show.
 
 ## I2C permissions
 
-Without this, the app still lists connected monitors but cannot change
-them:
-
-```bash
-./scripts/install-i2c-permissions.sh
-```
-
-Then log out and back in. Enable DDC/CI in the monitor's own OSD if the
-brand ships with it off.
+The first-run dialog requests this via `pkexec` and applies ACLs so the
+**current session** can talk to `/dev/i2c-*` immediately. The fallback
+script is `scripts/install-i2c-permissions.sh`. Enable DDC/CI in the
+monitor's own OSD if the brand ships with it off.
 
 ## Keyboard
 
