@@ -145,6 +145,24 @@ class RunTests(unittest.TestCase):
         run(["brightness", "down"], service=client, out=out)
         self.assertIn("U2720Q: 35%", out.getvalue())
 
+    def test_privileged_setup_refuses_non_root(self) -> None:
+        from monitorcontrol.cli import _run_privileged_setup
+
+        out = io.StringIO()
+        self.assertEqual(_run_privileged_setup("hisao", out, euid=1000), 1)
+        self.assertIn("root", out.getvalue())
+
+    def test_privileged_setup_as_root(self) -> None:
+        from unittest.mock import patch
+
+        from monitorcontrol.cli import _run_privileged_setup
+
+        out = io.StringIO()
+        with patch("monitorcontrol.i2c_setup.privileged_setup") as setup:
+            self.assertEqual(_run_privileged_setup("hisao", out, euid=0), 0)
+            setup.assert_called_once()
+        self.assertIn("hisao", out.getvalue())
+
     def test_gui_uses_launcher_hook(self) -> None:
         called = []
         code = run(["gui"], controller=self.ctrl, out=self.out, launch_gui=lambda: called.append(1) or 0)

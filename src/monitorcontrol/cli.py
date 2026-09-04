@@ -40,6 +40,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Start the daemon without showing the window (autostart)",
     )
+    parser.add_argument(
+        "--privileged-setup",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument("--setup-user", default="", help=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("list", help="List detected displays")
     sub.add_parser("gui", help="Open the control window")
@@ -178,6 +184,23 @@ def _run_extension(action: str, *, dest, out: TextIO) -> int:
     return 1
 
 
+def _run_privileged_setup(username: str, out: TextIO, *, euid: int | None = None) -> int:
+    import os
+
+    if (os.geteuid() if euid is None else euid) != 0:
+        out.write("privileged setup must run as root via pkexec\n")
+        return 1
+    from monitorcontrol import i2c_setup
+
+    try:
+        i2c_setup.privileged_setup(username)
+    except ValueError as exc:
+        out.write(f"{exc}\n")
+        return 1
+    out.write(f"I2C access is ready for {username} in this session.\n")
+    return 0
+
+
 def run(
     argv: Sequence[str] | None = None,
     *,
@@ -191,6 +214,8 @@ def run(
 ) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.privileged_setup:
+        return _run_privileged_setup(args.setup_user, out)
     if args.command in {None, "gui"}:
         if launch_gui is not None:
             return launch_gui()

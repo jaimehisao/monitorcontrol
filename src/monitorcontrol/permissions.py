@@ -25,7 +25,7 @@ def permission_message() -> str | None:
     if i2c_ready():
         return None
     return (
-        "External monitors cannot be controlled until this user can open "
-        "/dev/i2c-*. Add the user to the i2c group and install the udev rule, "
-        "then log out and back in."
+        "Display control needs a one-time admin approval so this user can "
+        "open /dev/i2c-*. Run: pkexec python3 -m monitorcontrol "
+        "--privileged-setup --setup-user \"$USER\""
     )
