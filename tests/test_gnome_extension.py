@@ -27,6 +27,21 @@ class ExtensionInstallTests(unittest.TestCase):
             self.assertFalse(is_installed(root))
             self.assertFalse(uninstall(root))
 
+    def test_enable_calls_gnome_extensions(self) -> None:
+        from monitorcontrol.gnome_extension import UUID, enable
+
+        class Proc:
+            returncode = 0
+
+        seen = []
+
+        def runner(argv, **_kwargs):
+            seen.append(argv)
+            return Proc()
+
+        self.assertTrue(enable(runner=runner))
+        self.assertEqual(seen[0][:3], ["gnome-extensions", "enable", UUID])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -16,6 +16,7 @@ class Config:
     autostart: bool = False
     shortcuts: bool = False
     volume_keys: bool = False
+    setup_complete: bool = False
 
     def clamp(self) -> Config:
         step = max(1, min(50, int(self.step)))
@@ -25,6 +26,7 @@ class Config:
             autostart=bool(self.autostart),
             shortcuts=bool(self.shortcuts),
             volume_keys=bool(self.volume_keys),
+            setup_complete=bool(self.setup_complete),
         )
 
 
