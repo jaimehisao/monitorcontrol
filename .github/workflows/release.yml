@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK, PyGObject, Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi \
+            python3-gi-cairo \
+            python3-pip \
+            python3-venv \
+            gir1.2-gtk-4.0 \
+            gir1.2-adw-1 \
+            xvfb
+
+      - name: Virtualenv with system GI modules
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install coverage build
+
+      - name: Tests
+        env:
+          PYTHONPATH: src
+        run: |
+          xvfb-run -a .venv/bin/coverage run --source=src/monitorcontrol -m unittest discover -s tests
+          .venv/bin/coverage report
+
+      - name: Check tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag v$tag does not match pyproject version $version"
+            exit 1
+          fi
+
+      - name: Build wheel, sdist, and linux binary
+        run: |
+          source .venv/bin/activate
+          ./scripts/build-release.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitorcontrol-dist
+          path: dist/*
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          cat > /tmp/release-notes.md <<EOF
+          ## Downloads
+
+          | File | What it is |
+          | --- | --- |
+          | \`monitorcontrol-${version}-linux\` | Single-file executable (zipapp) |
+          | \`monitorcontrol-${version}-py3-none-any.whl\` | pip wheel |
+          | \`monitorcontrol-${version}.tar.gz\` | Source tarball |
+          | \`SHA256SUMS\` | Checksums |
+
+          The linux binary still needs distro GTK 4, libadwaita, and PyGObject:
+
+          \`\`\`bash
+          # Debian / Ubuntu
+          sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1
+          chmod +x monitorcontrol-${version}-linux
+          ./monitorcontrol-${version}-linux list
+          \`\`\`
+
+          \`\`\`bash
+          pip install monitorcontrol-${version}-py3-none-any.whl
+          \`\`\`
+          EOF
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/monitorcontrol \
+            "dist/monitorcontrol-${version}-linux" \
+            "dist/monitorcontrol-${version}-py3-none-any.whl" \
+            "dist/monitorcontrol-${version}.tar.gz" \
+            dist/SHA256SUMS \
+            --title "MonitorControl ${GITHUB_REF_NAME}" \
+            --notes-file /tmp/release-notes.md \
+            --generate-notes

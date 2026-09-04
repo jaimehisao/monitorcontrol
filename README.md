@@ -1,9 +1,32 @@
 # MonitorControl for Linux
 
+[![CI](https://github.com/jaimehisao/monitorcontrol/actions/workflows/ci.yml/badge.svg)](https://github.com/jaimehisao/monitorcontrol/actions/workflows/ci.yml)
+[![Release](https://github.com/jaimehisao/monitorcontrol/actions/workflows/release.yml/badge.svg)](https://github.com/jaimehisao/monitorcontrol/releases)
+
 Control brightness, contrast, and volume on **whatever is plugged in** —
 the way [MonitorControl](https://github.com/MonitorControl/MonitorControl)
 does on macOS: keys, an on-screen HUD, and a slider where the desktop
 already puts brightness.
+
+## Downloads
+
+Binaries and pip packages are attached to [GitHub Releases](https://github.com/jaimehisao/monitorcontrol/releases).
+
+```bash
+# single-file executable (needs system GTK 4 / libadwaita / PyGObject)
+chmod +x monitorcontrol-*-linux
+./monitorcontrol-*-linux list
+
+# or pip
+pip install monitorcontrol-*-py3-none-any.whl
+```
+
+Publish a release by pushing a version tag that matches `pyproject.toml`:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
 
 It does not have a per-model database. External monitors are driven with
 standard DDC/CI (VESA MCCS VCP codes) and probed for the features they

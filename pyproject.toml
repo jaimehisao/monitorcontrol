@@ -27,7 +27,7 @@ dependencies = []
 monitorcontrol = "monitorcontrol.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/MonitorControl/MonitorControl"
+Homepage = "https://github.com/jaimehisao/monitorcontrol"
 
 [tool.setuptools.packages.find]
 where = ["src"]
