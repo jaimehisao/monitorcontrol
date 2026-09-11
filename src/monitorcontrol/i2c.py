@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from monitorcontrol.ddc import DDCCI_ADDR, DdcError, DdcPermissionError, I2C_SLAVE
+from monitorcontrol.edid import EDID_HEADER
+
+I2C_EDID_ADDR = 0x50
 
 DEFAULT_I2C_DEV = Path("/sys/class/i2c-dev")
 DEFAULT_DEV_ROOT = Path("/dev")
@@ -102,6 +105,31 @@ def iter_i2c_buses(class_root: Path = DEFAULT_I2C_DEV) -> list[I2cBus]:
 
 def display_buses(class_root: Path = DEFAULT_I2C_DEV) -> list[I2cBus]:
     return [bus for bus in iter_i2c_buses(class_root) if bus.likely_display]
+
+
+def read_edid(bus_number: int, *, dev_root: Path = DEFAULT_DEV_ROOT) -> bytes | None:
+    """Read the 128-byte EDID base block from DDC EEPROM (I2C 0x50).
+
+    This is how we map a DRM connector to an I2C bus when the driver
+    does not expose a `ddc` symlink (NVIDIA proprietary, some USB-C).
+    """
+    path = Path(dev_root) / f"i2c-{bus_number}"
+    try:
+        fd = os.open(path, os.O_RDWR)
+    except OSError:
+        return None
+    try:
+        try:
+            fcntl.ioctl(fd, I2C_SLAVE, I2C_EDID_ADDR)
+            os.write(fd, b"\x00")
+            data = os.read(fd, 128)
+        except OSError:
+            return None
+    finally:
+        os.close(fd)
+    if not data or len(data) < 128 or data[:8] != EDID_HEADER:
+        return None
+    return bytes(data[:128])
 
 
 def i2c_device_available(bus_number: int, *, dev_root: Path = DEFAULT_DEV_ROOT) -> bool:
