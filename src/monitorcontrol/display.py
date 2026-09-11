@@ -277,6 +277,12 @@ def discover(
         except DdcError:
             client.close()
             return None
+        if not probed:
+            # ioctl(I2C_SLAVE, 0x37) succeeds on many GPU/motherboard
+            # buses that have no monitor. Claiming those hides the bus
+            # that actually speaks DDC.
+            client.close()
+            return None
         return {"client": client, "probed": probed}
 
     for connector in externals:

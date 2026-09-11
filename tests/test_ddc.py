@@ -108,6 +108,22 @@ class DecodeTests(unittest.TestCase):
         with self.assertRaisesRegex(DdcError, "checksum"):
             decode_get_vcp_reply(_reply(checksum=0x00), 0x10)
 
+    def test_lenovo_p27h20_reply_checksums_with_0x50(self) -> None:
+        # Captured from a P27h-20 on NVIDIA i2c adapter 6. VESA reply
+        # checksum XORs host dest 0x50, not the 0x51 source address.
+        packet = bytes.fromhex("6e 88 02 00 10 00 00 64 00 64 a4")
+        reply = decode_get_vcp_reply(packet, 0x10)
+        self.assertEqual(reply.current, 100)
+        self.assertEqual(reply.maximum, 100)
+        contrast = decode_get_vcp_reply(
+            bytes.fromhex("6e 88 02 00 12 00 00 64 00 4b 89"), 0x12
+        )
+        self.assertEqual(contrast.current, 75)
+        volume = decode_get_vcp_reply(
+            bytes.fromhex("6e 88 02 00 62 00 00 64 00 32 80"), 0x62
+        )
+        self.assertEqual(volume.current, 50)
+
     def test_short_packet(self) -> None:
         with self.assertRaises(DdcError):
             decode_get_vcp_reply(b"\x6e\x82", 0x10)

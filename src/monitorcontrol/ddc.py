@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from typing import Callable, Protocol
 
 HOST_ADDRESS = 0x51
+# Reply checksums XOR this, the host *write* address (0x28 << 1), not 0x51.
+HOST_DEST_ADDRESS = 0x50
 DDCCI_ADDR = 0x37
 PROTOCOL_FLAG = 0x80
 GET_VCP = 0x01
@@ -92,13 +94,14 @@ def decode_get_vcp_reply(packet: bytes, expected_code: int) -> VcpReply:
     header = packet[:2]
     payload = packet[2 : 2 + length]
     wire_checksum = packet[2 + length]
-    calculated = checksum(header + payload)
-    if wire_checksum != calculated and (wire_checksum ^ calculated) != 0:
-        # Some panels XOR the host address into the checksum. Accept that
-        # variant; reject anything else.
-        alt = checksum(bytes([HOST_ADDRESS]) + header + payload)
-        if wire_checksum != calculated and wire_checksum != alt:
-            raise DdcError("DDC checksum mismatch")
+    body = header + payload
+    checksums = {
+        checksum(body),
+        checksum(bytes([HOST_ADDRESS]) + body),
+        checksum(bytes([HOST_DEST_ADDRESS]) + body),
+    }
+    if wire_checksum not in checksums:
+        raise DdcError("DDC checksum mismatch")
 
     if length < 8:
         raise DdcError(f"DDC payload too small: {length}")
