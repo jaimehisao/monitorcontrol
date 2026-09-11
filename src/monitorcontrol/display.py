@@ -58,6 +58,7 @@ class FeatureState:
 
 
 DdcOpener = Callable[[int], DdcClient | None]
+EdidReader = Callable[[int], bytes | None]
 
 
 @dataclass
@@ -230,15 +231,28 @@ def _open_linux(bus: int) -> DdcClient | None:
         return None
 
 
+def _connector_edid_blob(connector: Connector) -> bytes | None:
+    if connector.edid is None:
+        return None
+    return connector.edid.raw[:128]
+
+
 def discover(
     *,
     drm_root: Path = DEFAULT_DRM_ROOT,
     backlight_root: Path = DEFAULT_BACKLIGHT_ROOT,
     i2c_class_root: Path = DEFAULT_I2C_DEV,
     opener: DdcOpener | None = None,
+    edid_reader: EdidReader | None = None,
 ) -> list[Display]:
     """Inventory every connected display we can see."""
     open_ddc = opener if opener is not None else _open_linux
+    # Tests inject `opener`; do not talk to real /dev/i2c-* unless asked.
+    if edid_reader is None:
+        if opener is None:
+            from monitorcontrol.i2c import read_edid as edid_reader
+        else:
+            edid_reader = lambda _n: None  # noqa: E731
     connectors = connected_connectors(drm_root)
     backlights = iter_backlights(backlight_root)
     displays: list[Display] = []
@@ -260,6 +274,16 @@ def discover(
 
     permission_blocked = False
     claimed_buses: set[int] = set()
+    used_edids: set[bytes] = set()
+    edid_cache: dict[int, bytes | None] = {}
+
+    def edid_of(bus_number: int) -> bytes | None:
+        if bus_number not in edid_cache:
+            try:
+                edid_cache[bus_number] = edid_reader(bus_number)
+            except Exception:
+                edid_cache[bus_number] = None
+        return edid_cache[bus_number]
 
     def try_bus(bus_number: int) -> DdcClient | dict | None:
         nonlocal permission_blocked
@@ -285,23 +309,62 @@ def discover(
             return None
         return {"client": client, "probed": probed}
 
-    for connector in externals:
+    def buses_for(connector: Connector) -> tuple[list[int], bool]:
+        """Candidate buses, plus whether that list is locked to an EDID match."""
         preferred = _bus_from_ddc_symlink(connector.sys_path)
-        candidates: list[int] = []
-        if preferred is not None:
-            candidates.append(preferred)
-        for bus in display_buses(i2c_class_root):
-            if bus.number not in candidates:
-                candidates.append(bus.number)
+        blob = _connector_edid_blob(connector)
+        all_buses = [bus.number for bus in display_buses(i2c_class_root)]
+        matched: list[int] = []
+        if blob is not None:
+            order = ([preferred] if preferred is not None else []) + all_buses
+            for number in order:
+                if number is None or number in claimed_buses or number in matched:
+                    continue
+                got = edid_of(number)
+                if got is not None and got == blob:
+                    matched.append(number)
+        if matched:
+            return matched, True
+        fallback: list[int] = []
+        if preferred is not None and preferred not in claimed_buses:
+            fallback.append(preferred)
+        for number in all_buses:
+            if number not in claimed_buses and number not in fallback:
+                fallback.append(number)
+        return fallback, False
 
+    for connector in externals:
+        blob = _connector_edid_blob(connector)
+        candidates, edid_locked = buses_for(connector)
         attached = False
         for bus_number in candidates:
             if bus_number in claimed_buses:
                 continue
             result = try_bus(bus_number)
+            if edid_locked:
+                claimed_buses.add(bus_number)
+                if blob is not None:
+                    used_edids.add(blob)
+                if result:
+                    displays.append(
+                        _ddc_display(
+                            connector, bus_number, result["client"], result["probed"]
+                        )
+                    )
+                else:
+                    displays.append(
+                        _uncontrolled(
+                            connector,
+                            "no DDC/CI on this connection (enable it in the monitor OSD if it has one)",
+                        )
+                    )
+                attached = True
+                break
             if not result:
                 continue
             claimed_buses.add(bus_number)
+            if blob is not None:
+                used_edids.add(blob)
             displays.append(
                 _ddc_display(connector, bus_number, result["client"], result["probed"])
             )
@@ -318,6 +381,9 @@ def discover(
     # DDC monitors that never matched a DRM connector still count.
     for bus in display_buses(i2c_class_root):
         if bus.number in claimed_buses:
+            continue
+        blob = edid_of(bus.number)
+        if blob is not None and blob in used_edids:
             continue
         result = try_bus(bus.number)
         if not result:

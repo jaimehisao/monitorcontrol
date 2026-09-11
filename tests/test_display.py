@@ -186,6 +186,36 @@ class DisplayObjectTests(unittest.TestCase):
 
 
 class IsolatedDiscoverTests(unittest.TestCase):
+    def test_edid_match_beats_a_decoy_vcp_bus(self) -> None:
+        from tests.test_detect import make_edid
+
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            drm = root / "drm"
+            hdmi = drm / "card1-HDMI-A-1"
+            blob = make_edid(manufacturer="LEN", name="P27h-20", serial="V9091HR5")
+            _write(hdmi / "status", "connected\n")
+            _write(hdmi / "enabled", "enabled\n")
+            _write(hdmi / "edid", blob)
+            i2c = root / "i2c"
+            _write(i2c / "i2c-3" / "name", "NVIDIA i2c adapter 1 at 1:00.0\n")
+            _write(i2c / "i2c-6" / "name", "NVIDIA i2c adapter 6 at 1:00.0\n")
+            displays = discover(
+                drm_root=drm,
+                backlight_root=root / "bl",
+                i2c_class_root=i2c,
+                opener=_opener(
+                    {
+                        3: {0x10: (1, 100)},
+                        6: {0x10: (100, 100), 0x12: (75, 100)},
+                    }
+                ),
+                edid_reader=lambda n: bytes(blob[:128]) if n == 6 else None,
+            )
+            panel = next(d for d in displays if d.name == "P27h-20")
+            self.assertEqual(panel.bus_number, 6)
+            self.assertEqual(panel.features[Feature.BRIGHTNESS].percent, 100)
+
     def test_nvidia_without_ddc_symlink_skips_empty_buses(self) -> None:
         from tests.test_detect import make_edid
 

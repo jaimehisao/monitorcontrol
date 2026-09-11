@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from monitorcontrol.ddc import DdcClient, DdcError, encode_set_vcp
-from monitorcontrol.i2c import display_buses, iter_i2c_buses
+from monitorcontrol.i2c import display_buses, iter_i2c_buses, read_edid
 from monitorcontrol.vcp import Feature
 from tests.test_ddc import _reply
 
@@ -91,6 +91,22 @@ class BusEnumerateTests(unittest.TestCase):
 
     def test_empty_sysfs(self) -> None:
         self.assertEqual(iter_i2c_buses(self.root / "missing"), [])
+
+    def test_read_edid_missing_node(self) -> None:
+        self.assertIsNone(read_edid(99, dev_root=self.root))
+
+    def test_read_edid_valid_block(self) -> None:
+        from unittest.mock import patch
+
+        from monitorcontrol.edid import EDID_HEADER
+
+        blob = EDID_HEADER + b"\x00" * 120
+        with patch("monitorcontrol.i2c.os.open", return_value=3), patch(
+            "monitorcontrol.i2c.fcntl.ioctl"
+        ), patch("monitorcontrol.i2c.os.write"), patch(
+            "monitorcontrol.i2c.os.read", return_value=blob
+        ), patch("monitorcontrol.i2c.os.close"):
+            self.assertEqual(read_edid(6, dev_root=self.root), blob)
 
 
 if __name__ == "__main__":
