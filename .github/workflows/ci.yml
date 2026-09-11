@@ -60,7 +60,7 @@ jobs:
         run: |
           dnf -y install rpm-build python3-devel python3-pip \
             python3-setuptools python3-gobject gtk4 libadwaita \
-            python3-wheel python3-build python3-pyproject-rpm-macros \
+            python3-wheel python3-build pyproject-rpm-macros \
             systemd-rpm-macros tar
           chmod +x packaging/rpm/build.sh
           ./packaging/rpm/build.sh
