@@ -35,6 +35,25 @@ class ShortcutTests(unittest.TestCase):
             "monitorcontrol brightness up",
         )
         self.assertEqual(len(installed_paths(self.store)), 2)
+        self.assertTrue(self.store.shell_brightness_inhibited)
+
+    def test_install_releases_shell_keys_before_writing_bindings(self) -> None:
+        order: list[str] = []
+
+        class OrderStore(MemoryShortcutStore):
+            def inhibit_shell_brightness(self) -> None:
+                order.append("inhibit")
+                super().inhibit_shell_brightness()
+
+            def write(self, path: str, name: str, command: str, accel: str) -> None:
+                order.append(f"write:{accel}")
+                super().write(path, name, command, accel)
+
+        store = OrderStore()
+        install(store, program="mc")
+        self.assertEqual(order[0], "inhibit")
+        self.assertIn("write:", order[1])
+        self.assertEqual(order[-1], "write:XF86MonBrightnessDown")
 
     def test_volume_opt_in_and_opt_out(self) -> None:
         install(self.store, include_volume=True, program="mc")
@@ -53,6 +72,7 @@ class ShortcutTests(unittest.TestCase):
             ["/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/other/"],
         )
         self.assertEqual(installed_paths(self.store), [])
+        self.assertFalse(self.store.shell_brightness_inhibited)
 
     def test_gnome_store_adapter(self) -> None:
         from unittest.mock import MagicMock, patch
@@ -72,6 +92,23 @@ class ShortcutTests(unittest.TestCase):
             inst.set_string.assert_called()
             store.drop("/q/")
             inst.reset.assert_called()
+
+    def test_gnome_store_inhibits_shell_brightness(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from monitorcontrol.shortcuts import SHELL_BRIGHTNESS_KEYS, gnome_store
+
+        inst = MagicMock()
+        inst.get_strv.return_value = []
+        inst.list_keys.return_value = list(SHELL_BRIGHTNESS_KEYS)
+        with patch("gi.repository.Gio.Settings") as Settings:
+            Settings.new.return_value = inst
+            store = gnome_store()
+            store.inhibit_shell_brightness()
+            inst.set_strv.assert_any_call("screen-brightness-up", [])
+            self.assertEqual(inst.set_strv.call_count, len(SHELL_BRIGHTNESS_KEYS))
+            store.restore_shell_brightness()
+            self.assertEqual(inst.reset.call_count, len(SHELL_BRIGHTNESS_KEYS))
 
     def test_command_for_uses_program(self) -> None:
         binding = BINDINGS[0]

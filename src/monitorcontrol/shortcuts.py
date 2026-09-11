@@ -1,9 +1,9 @@
 """Install GNOME custom keybindings for brightness (and optional volume).
 
-On a desktop with no sysfs backlight, GNOME does not bind
-XF86MonBrightness*, so these fill the same role as MonitorControl's
-media-key grab on macOS. Volume keys stay with PipeWire unless the user
-opts in.
+GNOME Shell 49+ binds XF86MonBrightness* itself and no-ops on a desktop
+with no kernel backlight. Custom media-key commands never fire unless
+those shell bindings are cleared. Volume keys stay with PipeWire unless
+the user opts in.
 """
 
 from __future__ import annotations
@@ -20,6 +20,15 @@ VOLUME_DOWN = "monitorcontrol-volume-down"
 VOLUME_MUTE = "monitorcontrol-volume-mute"
 
 PATH_PREFIX = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/"
+SHELL_SCHEMA = "org.gnome.shell.keybindings"
+SHELL_BRIGHTNESS_KEYS = (
+    "screen-brightness-up",
+    "screen-brightness-down",
+    "screen-brightness-up-monitor",
+    "screen-brightness-down-monitor",
+    "screen-brightness-cycle",
+    "screen-brightness-cycle-monitor",
+)
 
 
 @dataclass(frozen=True)
@@ -65,6 +74,8 @@ class ShortcutStore(Protocol):
     def set_paths(self, paths: list[str]) -> None: ...
     def write(self, path: str, name: str, command: str, accel: str) -> None: ...
     def drop(self, path: str) -> None: ...
+    def inhibit_shell_brightness(self) -> None: ...
+    def restore_shell_brightness(self) -> None: ...
 
 
 class MemoryShortcutStore:
@@ -73,6 +84,7 @@ class MemoryShortcutStore:
     def __init__(self, paths: list[str] | None = None) -> None:
         self.paths = list(paths or [])
         self.entries: dict[str, dict[str, str]] = {}
+        self.shell_brightness_inhibited = False
 
     def get_paths(self) -> list[str]:
         return list(self.paths)
@@ -85,6 +97,12 @@ class MemoryShortcutStore:
 
     def drop(self, path: str) -> None:
         self.entries.pop(path, None)
+
+    def inhibit_shell_brightness(self) -> None:
+        self.shell_brightness_inhibited = True
+
+    def restore_shell_brightness(self) -> None:
+        self.shell_brightness_inhibited = False
 
 
 def _wanted(include_volume: bool) -> tuple[Binding, ...]:
@@ -104,12 +122,20 @@ def install(
     include_volume: bool = False,
     program: str | None = None,
 ) -> list[str]:
+    # Shell must release XF86MonBrightness* before gsd-media-keys can
+    # GrabAccelerator. Writing custom keys first (first-run used to)
+    # fails the grab, and gsd never retries.
+    store.inhibit_shell_brightness()
     paths = store.get_paths()
     ours = {binding.path for binding in BINDINGS}
     kept = [path for path in paths if path not in ours]
     added: list[str] = []
-    for binding in _wanted(include_volume):
-        store.write(binding.path, binding.name, command_for(binding, program), binding.accel)
+    wanted = _wanted(include_volume)
+    for binding in wanted:
+        command = command_for(binding, program)
+        # Empty then set so gsd-media-keys re-grabs when this is a reinstall.
+        store.write(binding.path, binding.name, command, "")
+        store.write(binding.path, binding.name, command, binding.accel)
         kept.append(binding.path)
         added.append(binding.path)
     # Drop volume bindings if the user turned that off.
@@ -126,6 +152,7 @@ def uninstall(store: ShortcutStore) -> list[str]:
     store.set_paths([path for path in store.get_paths() if path not in ours])
     for path in removed:
         store.drop(path)
+    store.restore_shell_brightness()
     return removed
 
 
@@ -157,6 +184,30 @@ def gnome_store() -> ShortcutStore:
             settings.reset("name")
             settings.reset("command")
             settings.reset("binding")
+
+        def _shell_settings(self):
+            try:
+                return Gio.Settings.new(SHELL_SCHEMA)
+            except Exception:
+                return None
+
+        def inhibit_shell_brightness(self) -> None:
+            settings = self._shell_settings()
+            if settings is None:
+                return
+            known = set(settings.list_keys())
+            for key in SHELL_BRIGHTNESS_KEYS:
+                if key in known:
+                    settings.set_strv(key, [])
+
+        def restore_shell_brightness(self) -> None:
+            settings = self._shell_settings()
+            if settings is None:
+                return
+            known = set(settings.list_keys())
+            for key in SHELL_BRIGHTNESS_KEYS:
+                if key in known:
+                    settings.reset(key)
 
     return GSettingsShortcutStore()
 
