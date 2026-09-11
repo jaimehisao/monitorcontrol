@@ -83,6 +83,35 @@ jobs:
             --workpath build/pyinstaller-work
           file build/pyinstaller/monitorcontrol
           xvfb-run -a build/pyinstaller/monitorcontrol --help
+          .venv/bin/python - <<'PY'
+          from PyInstaller.archive.readers import CArchiveReader
+          r = CArchiveReader("build/pyinstaller/monitorcontrol")
+          needed = (
+              "monitorcontrol/data/style.css",
+              "monitorcontrol/data/gnome-extension/extension.js",
+              "monitorcontrol/data/gnome-extension/metadata.json",
+          )
+          missing = [name for name in needed if name not in r.toc]
+          if missing:
+              raise SystemExit(f"frozen binary missing data files: {missing}")
+          print("bundled data ok")
+          PY
+          # Startup used to crash with FileNotFoundError when CSS was omitted.
+          set +e
+          timeout 8 xvfb-run -a build/pyinstaller/monitorcontrol --background \
+            > /tmp/mc-bg.out 2>&1
+          status=$?
+          set -e
+          if grep -E 'Traceback|FileNotFoundError' /tmp/mc-bg.out; then
+            cat /tmp/mc-bg.out
+            exit 1
+          fi
+          # 124 = still running when timeout fired, which is what we want.
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            echo "background startup exited $status"
+            cat /tmp/mc-bg.out
+            exit 1
+          fi
 
       - name: Upload binary
         uses: actions/upload-artifact@v4

@@ -1,4 +1,5 @@
 # PyInstaller spec: one-file Linux binary with GTK 4 / Adwaita GI hooks.
+import sys
 from pathlib import Path
 
 from PyInstaller.building.api import EXE, PYZ
@@ -9,7 +10,15 @@ root = Path(SPECPATH).resolve().parent
 src = root / "src"
 entry = Path(SPECPATH) / "entry.py"
 
+# collect_data_files() imports the package. During a freeze it is not
+# pip-installed, so src/ has to be on sys.path or CSS and the GNOME
+# extension are left out and the GUI crashes on startup.
+sys.path.insert(0, str(src))
 datas = collect_data_files("monitorcontrol")
+if not any(Path(src_path).name == "style.css" for src_path, _dest in datas):
+    raise SystemExit(
+        "PyInstaller did not collect monitorcontrol data files (style.css missing)"
+    )
 
 a = Analysis(
     [str(entry)],
