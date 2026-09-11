@@ -38,9 +38,35 @@ pip install monitorcontrol-*-py3-none-any.whl
 Publish a release by pushing a version tag that matches `pyproject.toml`:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
+
+## Fedora (dnf) and Ubuntu (apt)
+
+The license is **MIT**: anyone can use, copy, and package this, including
+Fedora and Debian.
+
+**COPR** is Fedora’s extra-package builder. You create a project once at
+[copr.fedorainfracloud.org](https://copr.fedorainfracloud.org/), point it
+at this GitHub repo (it uses `.copr/Makefile`). After a successful build:
+
+```bash
+sudo dnf copr enable <you>/monitorcontrol
+sudo dnf install monitorcontrol
+```
+
+**PPA** is the Ubuntu equivalent on Launchpad. `debian/` is the source
+package. After you publish the PPA:
+
+```bash
+sudo add-apt-repository ppa:<you>/monitorcontrol
+sudo apt install monitorcontrol
+```
+
+Those distro packages use system GTK 4 / PyGObject, not the GitHub
+PyInstaller binary. Build an RPM locally with
+`./packaging/rpm/build.sh` on Fedora.
 
 It does not have a per-model database. External monitors are driven with
 standard DDC/CI (VESA MCCS VCP codes) and probed for the features they

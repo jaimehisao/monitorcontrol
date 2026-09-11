@@ -1,0 +1,3 @@
+# DDC/CI over /dev/i2c-*. TAG+="uaccess" so the logged-in seat can talk
+# to displays without being in the i2c group after a re-login.
+KERNEL=="i2c-[0-9]*", GROUP="i2c", MODE="0660", TAG+="uaccess"
