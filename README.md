@@ -1,3 +1,9 @@
+<div align="center">
+
+![MonitorControl](docs/logo.png)
+
+</div>
+
 # MonitorControl for Linux
 
 [![CI](https://github.com/jaimehisao/monitorcontrol/actions/workflows/ci.yml/badge.svg)](https://github.com/jaimehisao/monitorcontrol/actions/workflows/ci.yml)
@@ -7,6 +13,14 @@ Control brightness, contrast, and volume on **whatever is plugged in** —
 the way [MonitorControl](https://github.com/MonitorControl/MonitorControl)
 does on macOS: keys, an on-screen HUD, and a slider where the desktop
 already puts brightness.
+
+<div align="center">
+
+![Control window](docs/screenshots/window.png)
+
+![On-screen brightness overlay](docs/screenshots/osd.png)
+
+</div>
 
 ## Downloads
 
