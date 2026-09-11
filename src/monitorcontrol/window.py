@@ -1,4 +1,8 @@
-"""Compact Adwaita window with a slider per feature per display."""
+"""Adwaita window with a slider per feature per display.
+
+The window grows with the cards (up to a cap) instead of sitting at a
+fixed postage-stamp size with an inner scrollbar.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +18,10 @@ from monitorcontrol.display import Display
 from monitorcontrol.permissions import SETUP_COMMANDS, permission_message
 from monitorcontrol.vcp import FEATURE_LABELS, Feature
 
+WINDOW_MIN_WIDTH = 520
+WINDOW_MIN_HEIGHT = 360
+WINDOW_MAX_HEIGHT = 800
+
 FEATURE_ICONS = {
     Feature.BRIGHTNESS: "display-brightness-symbolic",
     Feature.CONTRAST: "preferences-color-symbolic",
@@ -28,7 +36,7 @@ def _icon_for(feature: Feature) -> str:
 class ControlWindow(Adw.ApplicationWindow):
     def __init__(self, application: Adw.Application, controller: Controller) -> None:
         super().__init__(application=application, title="MonitorControl")
-        self.set_default_size(400, 280)
+        self.set_default_size(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
         self.controller = controller
         self.on_settings = None
         self.on_setup = None
@@ -66,10 +74,13 @@ class ControlWindow(Adw.ApplicationWindow):
         )
 
         self._stack = Gtk.Stack()
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_child(self._list)
-        self._stack.add_named(scrolled, "list")
+        self._scrolled = Gtk.ScrolledWindow()
+        self._scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._scrolled.set_propagate_natural_height(True)
+        self._scrolled.set_min_content_height(200)
+        self._scrolled.set_max_content_height(WINDOW_MAX_HEIGHT)
+        self._scrolled.set_child(self._list)
+        self._stack.add_named(self._scrolled, "list")
         self._stack.add_named(self._status, "empty")
 
         self._sync = Adw.SwitchRow(
@@ -104,11 +115,26 @@ class ControlWindow(Adw.ApplicationWindow):
 
         if not self.controller.displays:
             self._stack.set_visible_child_name("empty")
+            self._fit_to_content()
             return
 
         self._stack.set_visible_child_name("list")
         for display in self.controller.displays:
             self._list.append(self._display_card(display))
+        self._fit_to_content()
+
+    def _fit_to_content(self) -> None:
+        """Grow the window to the cards; cap height so it cannot run off-screen."""
+        self.queue_resize()
+        content = self.get_content()
+        if content is None:
+            self.set_default_size(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
+            return
+        _min_w, nat_w, *_rest = content.measure(Gtk.Orientation.HORIZONTAL, -1)
+        _min_h, nat_h, *_rest = content.measure(Gtk.Orientation.VERTICAL, -1)
+        width = max(WINDOW_MIN_WIDTH, nat_w)
+        height = max(WINDOW_MIN_HEIGHT, min(nat_h, WINDOW_MAX_HEIGHT))
+        self.set_default_size(width, height)
 
     def _display_card(self, display: Display) -> Gtk.Widget:
         group = Adw.PreferencesGroup()

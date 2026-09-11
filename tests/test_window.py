@@ -34,7 +34,7 @@ class WindowSmokeTests(unittest.TestCase):
         gi.require_version("Adw", "1")
         from gi.repository import Adw
 
-        from monitorcontrol.window import ControlWindow
+        from monitorcontrol.window import WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, ControlWindow
 
         Adw.init()
         app = Adw.Application(application_id="dev.monitorcontrol.TestWindow")
@@ -43,6 +43,10 @@ class WindowSmokeTests(unittest.TestCase):
         controller.refresh()
         window = ControlWindow(app, controller)
         self.assertEqual(window.get_title(), "MonitorControl")
+        width, height = window.get_default_size()
+        self.assertGreaterEqual(width, WINDOW_MIN_WIDTH)
+        self.assertGreaterEqual(height, WINDOW_MIN_HEIGHT)
+        self.assertTrue(window._scrolled.get_propagate_natural_height())
         self.assertEqual(len(window._scales), 2)
         self.assertIn(("DEL:U2720Q:AA", Feature.BRIGHTNESS), window._scales)
         called = []
