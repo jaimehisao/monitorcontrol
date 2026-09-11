@@ -1,19 +1,44 @@
-# MonitorControl for Linux
+<p align="center">
+  <img src="docs/logo.png" width="168" height="168" alt="MonitorControl">
+</p>
 
-[![CI](https://github.com/jaimehisao/monitorcontrol/actions/workflows/ci.yml/badge.svg)](https://github.com/jaimehisao/monitorcontrol/actions/workflows/ci.yml)
-[![Release](https://github.com/jaimehisao/monitorcontrol/actions/workflows/release.yml/badge.svg)](https://github.com/jaimehisao/monitorcontrol/releases)
+<h1 align="center">MonitorControl for Linux</h1>
 
-Control brightness, contrast, and volume on **whatever is plugged in** —
-the way [MonitorControl](https://github.com/MonitorControl/MonitorControl)
-does on macOS: keys, an on-screen HUD, and a slider where the desktop
-already puts brightness.
+<p align="center">
+  Brightness, contrast, and volume on <strong>whatever is plugged in</strong> —
+  keys, an on-screen HUD, and a slider where the desktop already puts brightness.
+  The Linux counterpart to
+  <a href="https://github.com/MonitorControl/MonitorControl">MonitorControl for macOS</a>.
+</p>
 
-It does not have a per-model database. External monitors use standard
-DDC/CI (VESA MCCS). Laptop panels use `/sys/class/backlight`. NVIDIA,
-AMD, and Intel are all fine; the app matches each cable to its I2C bus
-by EDID.
+<p align="center">
+  <a href="https://github.com/jaimehisao/monitorcontrol/actions/workflows/ci.yml"><img src="https://github.com/jaimehisao/monitorcontrol/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/jaimehisao/monitorcontrol/releases"><img src="https://github.com/jaimehisao/monitorcontrol/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+</p>
 
-## Install (GNOME)
+There is no per-model database. External monitors speak standard DDC/CI
+(VESA MCCS). Laptop panels use `/sys/class/backlight`. NVIDIA, AMD, and
+Intel all work: each cable is matched to its I2C bus by EDID.
+
+## Features
+
+- **First launch sets it up.** One admin prompt grants I2C for this
+  session. Brightness keys and autostart turn on immediately.
+- **GNOME.** A panel brightness icon and Quick Settings sliders (log out
+  once after install). On a laptop, GNOME's own slider still works; we
+  copy that percent onto every DDC display.
+- **OSD.** Key presses show a compact overlay, like the macOS app.
+- **CLI.** `list`, `brightness`, `contrast`, `volume` talk to the
+  running daemon so the OSD still appears.
+
+<p align="center">
+  <img src="docs/screenshots/window.png" alt="MonitorControl window with brightness, contrast, and volume sliders" width="480">
+</p>
+<p align="center">
+  <img src="docs/screenshots/osd.png" alt="On-screen brightness overlay" width="360">
+</p>
+
+## Install
 
 You need GTK 4 and libadwaita (Fedora Workstation already has them).
 
@@ -32,18 +57,13 @@ chmod +x monitorcontrol-*-linux
 ./monitorcontrol-*-linux
 ```
 
-Click **Continue** on first launch. One admin prompt grants display
-control for this session (no log out). Brightness keys and autostart
-turn on immediately. The GNOME Quick Settings slider appears after you
-**log out once**.
+Click **Continue**. If the sliders stay empty, enable **DDC/CI** in the
+monitor's own OSD — some brands ship with it off.
 
-If the sliders stay empty, enable **DDC/CI** in the monitor's own OSD.
-Some brands ship with it off.
+### Other desktops
 
-## Other desktops
-
-First launch still copies a `monitorcontrol` binary to `~/.local/bin`
-and grants I2C. Bind the keys yourself:
+First launch still copies a binary to `~/.local/bin` and grants I2C.
+Bind the keys yourself:
 
 ```
 # Hyprland / Sway
@@ -51,20 +71,26 @@ bindel = , XF86MonBrightnessUp, exec, monitorcontrol brightness up
 bindel = , XF86MonBrightnessDown, exec, monitorcontrol brightness down
 ```
 
-## From a checkout
+## Use
 
 ```bash
-PYTHONPATH=src python3 -m monitorcontrol                 # window
-PYTHONPATH=src python3 -m monitorcontrol --background    # daemon only
-PYTHONPATH=src python3 -m monitorcontrol list
-PYTHONPATH=src python3 -m monitorcontrol brightness up
-PYTHONPATH=src python3 -m monitorcontrol brightness 40
-PYTHONPATH=src python3 -m monitorcontrol --display HDMI volume down
+monitorcontrol                 # window
+monitorcontrol --background    # daemon only
+monitorcontrol list
+monitorcontrol brightness up
+monitorcontrol brightness 40
+monitorcontrol --display HDMI volume down
 ```
 
 `--display` matches a substring of the name, identity, or connector.
-If the daemon is already running, the CLI talks to it over D-Bus so the
-OSD can show.
+
+If you skipped first-run:
+
+```bash
+monitorcontrol shortcuts install
+monitorcontrol extension install
+# then log out once so GNOME loads the panel icon and slider
+```
 
 ## Uninstall
 
@@ -72,30 +98,25 @@ OSD can show.
 monitorcontrol uninstall
 ```
 
-That removes keybindings (and gives GNOME its brightness keys back),
-autostart, the app-menu launcher, the GNOME extension, `~/.local/bin/monitorcontrol`,
+Removes keybindings (GNOME gets its brightness keys back), autostart,
+the app-menu launcher, the GNOME extension, `~/.local/bin/monitorcontrol`,
 and config. The I2C udev rule stays so a later install (or ddcutil) still
 works. Delete `/etc/udev/rules.d/90-monitorcontrol-i2c.rules` with sudo
 if you want that gone too.
 
-## If you skipped first-run
+`--keep-config` leaves `~/.config/monitorcontrol`.
+
+## From a checkout
 
 ```bash
-monitorcontrol shortcuts install
-monitorcontrol extension install
-# then log out once so GNOME loads the Quick Settings slider
+PYTHONPATH=src python3 -m monitorcontrol
+PYTHONPATH=src python3 -m monitorcontrol list
 ```
 
-On a laptop, GNOME's own slider still works. We watch Mutter's
-`Backlight` property and copy that percent onto every DDC display.
-
-## I2C permissions
-
-The first-run dialog requests this via `pkexec` and applies ACLs so the
-**current session** can talk to `/dev/i2c-*` immediately. The fallback
+I2C grant from a git tree uses `PYTHONPATH` automatically. The fallback
 script is `scripts/install-i2c-permissions.sh`.
 
-## Publish a release
+## Releases
 
 Push a version tag that matches `pyproject.toml` from a PR, not from a
 direct push to `main`:
