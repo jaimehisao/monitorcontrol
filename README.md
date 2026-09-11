@@ -25,8 +25,8 @@ Publish a release by pushing a version tag that matches `pyproject.toml`
 from a PR, not from a direct push to `main`:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 It does not have a per-model database. External monitors are driven with
