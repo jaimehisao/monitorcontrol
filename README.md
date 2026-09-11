@@ -31,6 +31,13 @@ Intel all work: each cable is matched to its I2C bus by EDID.
 - **CLI.** `list`, `brightness`, `contrast`, `volume` talk to the
   running daemon so the OSD still appears.
 
+<p align="center">
+  <img src="docs/screenshots/window.png" alt="MonitorControl window with brightness, contrast, and volume sliders" width="480">
+</p>
+<p align="center">
+  <img src="docs/screenshots/osd.png" alt="On-screen brightness overlay" width="360">
+</p>
+
 ## Install
 
 You need GTK 4 and libadwaita (Fedora Workstation already has them).
