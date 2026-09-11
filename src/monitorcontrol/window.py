@@ -31,6 +31,7 @@ class ControlWindow(Adw.ApplicationWindow):
         self.set_default_size(400, 280)
         self.controller = controller
         self.on_settings = None
+        self.on_setup = None
         self._scales: dict[tuple[str, Feature], Gtk.Scale] = {}
         self._percent_labels: dict[tuple[str, Feature], Gtk.Label] = {}
         self._updating = False
@@ -49,8 +50,8 @@ class ControlWindow(Adw.ApplicationWindow):
         self.set_hide_on_close(True)
 
         self._banner = Adw.Banner()
-        self._banner.set_button_label("Copy setup commands")
-        self._banner.connect("button-clicked", self._on_copy_setup)
+        self._banner.set_button_label("Set up now")
+        self._banner.connect("button-clicked", self._on_banner)
 
         self._list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self._list.set_margin_top(12)
@@ -189,7 +190,10 @@ class ControlWindow(Adw.ApplicationWindow):
         self.controller.refresh()
         self.rebuild()
 
-    def _on_copy_setup(self, _banner: Adw.Banner) -> None:
+    def _on_banner(self, _banner: Adw.Banner) -> None:
+        if self.on_setup is not None:
+            self.on_setup()
+            return
         display = self.get_display()
         if display is None:
             return

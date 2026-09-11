@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import shutil
-from importlib import resources
+import subprocess
 from pathlib import Path
+
+from monitorcontrol.assetlib import package_data
 
 UUID = "monitorcontrol@monitorcontrol.dev"
 DEFAULT_ROOT = Path.home() / ".local" / "share" / "gnome-shell" / "extensions"
 
 
 def bundled_dir() -> Path:
-    return Path(resources.files("monitorcontrol")).joinpath("data", "gnome-extension")
+    return package_data("data", "gnome-extension")
 
 
 def install(dest_root: Path = DEFAULT_ROOT) -> Path:
@@ -33,3 +35,18 @@ def uninstall(dest_root: Path = DEFAULT_ROOT) -> bool:
 
 def is_installed(dest_root: Path = DEFAULT_ROOT) -> bool:
     return (dest_root / UUID / "metadata.json").is_file()
+
+
+def enable(*, runner=subprocess.run) -> bool:
+    """Ask gnome-extensions to turn it on. May still need a session restart."""
+    try:
+        proc = runner(
+            ["gnome-extensions", "enable", UUID],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0

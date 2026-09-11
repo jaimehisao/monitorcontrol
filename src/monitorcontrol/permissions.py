@@ -26,6 +26,5 @@ def permission_message() -> str | None:
         return None
     return (
         "Display control needs a one-time admin approval so this user can "
-        "open /dev/i2c-*. Run: pkexec python3 -m monitorcontrol "
-        "--privileged-setup --setup-user \"$USER\""
+        "open /dev/i2c-*. Use Set up now if the first-run prompt was skipped."
     )
