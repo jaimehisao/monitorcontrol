@@ -41,6 +41,9 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(ns.value, "up")
         ns = build_parser().parse_args(["brightness", "35"])
         self.assertEqual(ns.value, "35")
+        ns = build_parser().parse_args(["uninstall", "--keep-config"])
+        self.assertEqual(ns.command, "uninstall")
+        self.assertTrue(ns.keep_config)
 
 
 class RunTests(unittest.TestCase):
@@ -134,6 +137,26 @@ class RunTests(unittest.TestCase):
                 run(["extension", "status"], controller=self.ctrl, out=out, extension_root=dest),
                 1,
             )
+
+    def test_uninstall_command(self) -> None:
+        from unittest.mock import patch
+
+        from monitorcontrol.shortcuts import MemoryShortcutStore
+        from monitorcontrol.uninstall import UninstallResult
+
+        out = io.StringIO()
+        fake = UninstallResult(shortcuts=True, autostart=True, launcher=True)
+        with patch("monitorcontrol.uninstall.run", return_value=fake) as mocked:
+            code = run(
+                ["uninstall"],
+                controller=self.ctrl,
+                out=out,
+                shortcut_store=MemoryShortcutStore(),
+            )
+        self.assertEqual(code, 0)
+        mocked.assert_called_once()
+        self.assertIn("removed  keybindings", out.getvalue())
+        self.assertIn("Quit MonitorControl", out.getvalue())
 
     def test_service_client_path(self) -> None:
         from monitorcontrol.dbus import JsonClient, dispatch

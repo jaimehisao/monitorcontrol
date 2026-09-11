@@ -39,3 +39,18 @@ def install(program: str, *, apps: Path | None = None, icons: Path | None = None
     desktop.write_text(desktop_text(program), encoding="utf-8")
     shutil.copy2(package_data("data", ICON_NAME), dest_icons / ICON_NAME)
     return desktop
+
+
+def uninstall(*, apps: Path | None = None, icons: Path | None = None) -> bool:
+    dest_apps = apps if apps is not None else applications_dir()
+    dest_icons = icons if icons is not None else icon_dir()
+    removed = False
+    desktop = dest_apps / DESKTOP_NAME
+    if desktop.exists():
+        desktop.unlink()
+        removed = True
+    icon = dest_icons / ICON_NAME
+    if icon.exists():
+        icon.unlink()
+        removed = True
+    return removed

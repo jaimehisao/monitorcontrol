@@ -85,6 +85,28 @@ class ExtensionInstallTests(unittest.TestCase):
         self.assertEqual(add_enabled_uuid([]), [UUID])
         self.assertEqual(add_enabled_uuid([UUID]), [UUID])
 
+    def test_disable_drops_uuid(self) -> None:
+        from monitorcontrol.gnome_extension import UUID, disable, remove_enabled_uuid
+
+        self.assertEqual(remove_enabled_uuid([UUID, "other@x"]), ["other@x"])
+
+        class Proc:
+            returncode = 0
+
+        class Settings:
+            def __init__(self) -> None:
+                self.values = [UUID]
+
+            def get_strv(self, _key: str) -> list[str]:
+                return list(self.values)
+
+            def set_strv(self, _key: str, values: list[str]) -> None:
+                self.values = list(values)
+
+        settings = Settings()
+        self.assertTrue(disable(runner=lambda *_a, **_k: Proc(), settings=settings))
+        self.assertNotIn(UUID, settings.values)
+
 
 if __name__ == "__main__":
     unittest.main()

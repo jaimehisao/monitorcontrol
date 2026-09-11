@@ -66,6 +66,18 @@ PYTHONPATH=src python3 -m monitorcontrol --display HDMI volume down
 If the daemon is already running, the CLI talks to it over D-Bus so the
 OSD can show.
 
+## Uninstall
+
+```bash
+monitorcontrol uninstall
+```
+
+That removes keybindings (and gives GNOME its brightness keys back),
+autostart, the app-menu launcher, the GNOME extension, `~/.local/bin/monitorcontrol`,
+and config. The I2C udev rule stays so a later install (or ddcutil) still
+works. Delete `/etc/udev/rules.d/90-monitorcontrol-i2c.rules` with sudo
+if you want that gone too.
+
 ## If you skipped first-run
 
 ```bash
