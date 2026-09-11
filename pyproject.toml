@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "monitorcontrol"
-version = "0.1.0"
+version = "1.0.0"
 description = "Control external display brightness and volume on Linux as if they were native."
 readme = "README.md"
 license = { file = "LICENSE" }

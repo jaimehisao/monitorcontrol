@@ -46,3 +46,20 @@ jobs:
         run: |
           xvfb-run -a .venv/bin/coverage run --source=src/monitorcontrol -m unittest discover -s tests
           .venv/bin/coverage report
+
+  rpm:
+    name: Fedora RPM
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build RPM
+        run: |
+          dnf -y install git-core rpm-build python3-devel python3-pip \
+            python3-setuptools python3-gobject gtk4 libadwaita \
+            python3-wheel python3-build
+          chmod +x packaging/rpm/build.sh
+          ./packaging/rpm/build.sh
