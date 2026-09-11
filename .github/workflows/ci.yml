@@ -58,8 +58,9 @@ jobs:
           fetch-depth: 0
       - name: Build RPM
         run: |
-          dnf -y install git-core rpm-build python3-devel python3-pip \
+          dnf -y install rpm-build python3-devel python3-pip \
             python3-setuptools python3-gobject gtk4 libadwaita \
-            python3-wheel python3-build
+            python3-wheel python3-build python3-pyproject-rpm-macros \
+            systemd-rpm-macros tar
           chmod +x packaging/rpm/build.sh
           ./packaging/rpm/build.sh
