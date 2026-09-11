@@ -22,6 +22,12 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(dest, apps / DESKTOP_NAME)
             self.assertIn("Exec=/opt/monitorcontrol", dest.read_text(encoding="utf-8"))
             self.assertTrue((icons / ICON_NAME).is_file())
+            from monitorcontrol.launcher import uninstall
+
+            self.assertTrue(uninstall(apps=apps, icons=icons))
+            self.assertFalse((apps / DESKTOP_NAME).exists())
+            self.assertFalse((icons / ICON_NAME).exists())
+            self.assertFalse(uninstall(apps=apps, icons=icons))
 
 
 if __name__ == "__main__":

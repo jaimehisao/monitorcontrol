@@ -19,12 +19,15 @@ class OsdSmokeTests(unittest.TestCase):
         gi.require_version("Adw", "1")
         from gi.repository import Adw
 
-        from monitorcontrol.osd import Osd
+        from monitorcontrol.osd import OSD_HEIGHT, OSD_WIDTH, Osd
 
         Adw.init()
         app = Adw.Application(application_id="dev.monitorcontrol.TestOsd")
         app.register()
         osd = Osd(app)
+        width, height = osd.win.get_default_size()
+        self.assertGreaterEqual(width, OSD_WIDTH)
+        self.assertGreaterEqual(height, OSD_HEIGHT)
         display = Display(
             identity="x",
             name="x",

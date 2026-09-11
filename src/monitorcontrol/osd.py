@@ -19,6 +19,8 @@ from monitorcontrol.vcp import Feature
 from monitorcontrol.window import _icon_for
 
 HIDE_MS = 1500
+OSD_WIDTH = 320
+OSD_HEIGHT = 104
 
 
 class Osd:
@@ -31,13 +33,17 @@ class Osd:
             resizable=False,
         )
         self.win.add_css_class("osd-window")
-        self.win.set_default_size(260, 72)
+        self.win.set_default_size(OSD_WIDTH, OSD_HEIGHT)
         self.win.set_hide_on_close(True)
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(4)
+        box.set_margin_bottom(4)
+        box.set_margin_start(4)
+        box.set_margin_end(4)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
         self.icon = Gtk.Image.new_from_icon_name("display-brightness-symbolic")
-        self.icon.set_pixel_size(28)
+        self.icon.set_pixel_size(36)
         self.label = Gtk.Label(label="0%")
         self.label.add_css_class("osd-percent")
         self.label.set_xalign(1)

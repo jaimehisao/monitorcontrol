@@ -57,6 +57,9 @@ const Indicator = GObject.registerClass(
 class Indicator extends SystemIndicator {
     _init() {
         super._init();
+        this._icon = this._addIndicator();
+        this._icon.icon_name = 'display-brightness-symbolic';
+        this._icon.visible = false;
         this._sliders = new Map();
         this._proxy = null;
     }
@@ -76,6 +79,7 @@ class Indicator extends SystemIndicator {
             this.quickSettingsItems.push(slider);
             this._sliders.set(display.id, slider);
         }
+        this._icon.visible = this._sliders.size > 0;
     }
 
     applyChanged(payload) {

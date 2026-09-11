@@ -66,6 +66,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ext = sub.add_parser("extension", help="Install the GNOME Quick Settings slider")
     ext.add_argument("action", choices=["install", "uninstall", "status"])
+    drop = sub.add_parser(
+        "uninstall",
+        help="Remove keybindings, autostart, the GNOME extension, launcher, and user binary",
+    )
+    drop.add_argument(
+        "--keep-config",
+        action="store_true",
+        help="Leave ~/.config/monitorcontrol in place",
+    )
     return parser
 
 
@@ -242,6 +251,17 @@ def run(
 
         dest = extension_root if extension_root is not None else DEFAULT_ROOT
         return _run_extension(args.action, dest=Path(dest), out=out)
+    if args.command == "uninstall":
+        from monitorcontrol.uninstall import report, run as uninstall_user
+
+        result = uninstall_user(
+            shortcut_store=shortcut_store,
+            extension_root=extension_root,
+            keep_config=bool(getattr(args, "keep_config", False)),
+        )
+        for line in report(result):
+            out.write(f"{line}\n")
+        return 0
 
     own = False
     if service is None:

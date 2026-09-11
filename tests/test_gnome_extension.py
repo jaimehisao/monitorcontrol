@@ -21,7 +21,12 @@ class ExtensionInstallTests(unittest.TestCase):
             js = (dest / "extension.js").read_text(encoding="utf-8")
             self.assertIn("QuickSlider", js)
             self.assertIn("addExternalIndicator", js)
+            self.assertIn("_addIndicator", js)
+            self.assertIn("display-brightness-symbolic", js)
+            self.assertIn("this._icon.visible = this._sliders.size > 0", js)
             self.assertNotIn("XF86MonBrightnessUp", js)
+            self.assertNotIn("StatusNotifierItem", js)
+            self.assertNotIn("AppIndicator", js)
             mode = (dest / "extension.js").stat().st_mode & 0o777
             self.assertEqual(mode, 0o644)
             install(root)  # replace existing
@@ -60,11 +65,47 @@ class ExtensionInstallTests(unittest.TestCase):
         self.assertIn(UUID, settings.values)
         self.assertEqual(settings.keys, ["enabled-extensions", "enabled-extensions"])
 
+    def test_panel_icon_is_gnome_system_indicator(self) -> None:
+        js = (
+            Path(__file__).resolve().parents[1]
+            / "src"
+            / "monitorcontrol"
+            / "data"
+            / "gnome-extension"
+            / "extension.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("class Indicator extends SystemIndicator", js)
+        self.assertLess(js.index("_addIndicator"), js.index("addExternalIndicator"))
+        self.assertIn("icon_name = 'display-brightness-symbolic'", js)
+        self.assertIn("this._icon.visible = false", js)
+
     def test_add_enabled_uuid_is_idempotent(self) -> None:
         from monitorcontrol.gnome_extension import UUID, add_enabled_uuid
 
         self.assertEqual(add_enabled_uuid([]), [UUID])
         self.assertEqual(add_enabled_uuid([UUID]), [UUID])
+
+    def test_disable_drops_uuid(self) -> None:
+        from monitorcontrol.gnome_extension import UUID, disable, remove_enabled_uuid
+
+        self.assertEqual(remove_enabled_uuid([UUID, "other@x"]), ["other@x"])
+
+        class Proc:
+            returncode = 0
+
+        class Settings:
+            def __init__(self) -> None:
+                self.values = [UUID]
+
+            def get_strv(self, _key: str) -> list[str]:
+                return list(self.values)
+
+            def set_strv(self, _key: str, values: list[str]) -> None:
+                self.values = list(values)
+
+        settings = Settings()
+        self.assertTrue(disable(runner=lambda *_a, **_k: Proc(), settings=settings))
+        self.assertNotIn(UUID, settings.values)
 
 
 if __name__ == "__main__":
