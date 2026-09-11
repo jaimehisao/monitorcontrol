@@ -27,14 +27,17 @@ class BootstrapTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_gnome_first_run_grants_and_enables(self) -> None:
+        launched: list[str] = []
         result = bootstrap(
             self.actions,
             grant_i2c=lambda: (True, None),
             install_binary=lambda: "/home/u/.local/bin/monitorcontrol",
             on_gnome=True,
             enable_extension=lambda: True,
+            install_launcher=launched.append,
             i2c_ready=False,
         )
+        self.assertEqual(launched, ["/home/u/.local/bin/monitorcontrol"])
         self.assertTrue(result.i2c_ready)
         self.assertTrue(result.i2c_prompted)
         self.assertIsNone(result.i2c_error)
@@ -60,6 +63,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertFalse(result.i2c_ready)
         self.assertFalse(result.i2c_prompted)
         self.assertFalse(result.extension)
+        self.assertFalse(result.shortcuts)
         self.assertTrue(result.autostart)
         self.assertTrue(load(self.actions.config_path).setup_complete)
 

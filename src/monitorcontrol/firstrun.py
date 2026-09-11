@@ -13,8 +13,9 @@ from gi.repository import Adw, Gtk  # noqa: E402
 
 BODY = (
     "MonitorControl will ask for admin permission once so it can talk to "
-    "your displays over DDC/CI. After that it enables brightness keys, "
-    "starts at login, and adds a slider to GNOME Quick Settings."
+    "your displays over DDC/CI. After that it enables brightness keys and "
+    "starts at login. On GNOME a Quick Settings slider is installed; log "
+    "out once for it to appear."
 )
 
 

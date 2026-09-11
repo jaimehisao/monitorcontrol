@@ -35,10 +35,13 @@ def bootstrap(
     install_binary: Callable[[], str],
     on_gnome: bool,
     enable_extension: Callable[[], bool] | None = None,
+    install_launcher: Callable[[str], None] | None = None,
     i2c_ready: bool | None = None,
 ) -> BootstrapResult:
     binary = install_binary()
     actions.program = binary
+    if install_launcher is not None:
+        install_launcher(binary)
     prompted = False
     error: str | None = None
     ready = probe_i2c() if i2c_ready is None else i2c_ready
@@ -49,10 +52,12 @@ def bootstrap(
         if ok:
             error = None
     actions.set_autostart(True)
-    actions.set_shortcuts(True)
+    shortcuts = False
     extension = False
     extension_enabled = False
     if on_gnome:
+        actions.set_shortcuts(True)
+        shortcuts = True
         actions.set_extension(True)
         extension = True
         if enable_extension is not None:
@@ -65,7 +70,7 @@ def bootstrap(
         i2c_error=error,
         binary=binary,
         autostart=True,
-        shortcuts=True,
+        shortcuts=shortcuts,
         extension=extension,
         extension_enabled=extension_enabled,
     )

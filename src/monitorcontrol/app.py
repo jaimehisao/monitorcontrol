@@ -20,6 +20,7 @@ from monitorcontrol.dbus import export_session, own_bus_name
 from monitorcontrol.gnome_backlight import NativeBrightnessFollower, apply_native_percent, attach_mutter
 from monitorcontrol.gnome_extension import enable as enable_extension
 from monitorcontrol.i2c_setup import pkexec_grant
+from monitorcontrol.launcher import install as install_launcher
 from monitorcontrol.osd import Osd
 from monitorcontrol.paths import current_username, install_user_binary
 from monitorcontrol.service import MonitorService
@@ -137,6 +138,7 @@ class Application(Adw.Application):
             install_binary=lambda: str(install_user_binary()),
             on_gnome=running_on_gnome(),
             enable_extension=enable_extension,
+            install_launcher=install_launcher,
         )
         self.config = actions.config
         if self.controller is not None:

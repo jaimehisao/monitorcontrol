@@ -100,7 +100,11 @@ def privileged_argv(username: str, *, executable: str | None = None) -> list[str
     if _is_frozen() or executable:
         prog = executable or sys.executable
         return [prog, "--privileged-setup", "--setup-user", username]
+    from monitorcontrol.paths import package_src_root
+
     return [
+        "env",
+        f"PYTHONPATH={package_src_root()}",
         sys.executable,
         "-m",
         "monitorcontrol",

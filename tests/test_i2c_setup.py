@@ -76,6 +76,8 @@ class PrivilegedSetupTests(unittest.TestCase):
         argv = privileged_argv("hisao", executable=None)
         self.assertIn("--privileged-setup", argv)
         self.assertIn("hisao", argv)
+        self.assertEqual(argv[0], "env")
+        self.assertTrue(any(part.startswith("PYTHONPATH=") for part in argv))
 
         class Proc:
             returncode = 1
