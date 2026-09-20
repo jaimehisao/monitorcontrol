@@ -35,6 +35,9 @@ jobs:
           .venv/bin/pip install --upgrade pip
           .venv/bin/pip install coverage
 
+      - name: Check release version consistency
+        run: python3 scripts/release.py check
+
       - name: Run tests under Xvfb
         env:
           PYTHONPATH: src

@@ -24,22 +24,16 @@ already puts brightness.
 
 ## Downloads
 
-Binaries and pip packages are attached to [GitHub Releases](https://github.com/jaimehisao/monitorcontrol/releases).
+RPM and Debian packages are the primary installation formats. They use the
+distribution's GTK 4, libadwaita, and PyGObject packages. See the Fedora and
+Ubuntu packaging notes below.
+
+Python wheels and source distributions are secondary artifacts attached to
+[GitHub Releases](https://github.com/jaimehisao/monitorcontrol/releases).
+They still require GTK 4, libadwaita, and PyGObject from the distribution:
 
 ```bash
-# single-file executable (needs system GTK 4 / libadwaita / PyGObject)
-chmod +x monitorcontrol-*-linux
-./monitorcontrol-*-linux list
-
-# or pip
 pip install monitorcontrol-*-py3-none-any.whl
-```
-
-Publish a release by pushing a version tag that matches `pyproject.toml`:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
 ```
 
 ## Fedora (dnf) and Ubuntu (apt)
@@ -64,8 +58,7 @@ sudo add-apt-repository ppa:<you>/monitorcontrol
 sudo apt install monitorcontrol
 ```
 
-Those distro packages use system GTK 4 / PyGObject, not the GitHub
-PyInstaller binary. Build an RPM locally with
+Those distro packages use system GTK 4 / PyGObject. Build an RPM locally with
 `./packaging/rpm/build.sh` on Fedora.
 
 It does not have a per-model database. External monitors are driven with
@@ -160,3 +153,25 @@ PYTHONPATH=src .venv/bin/coverage report
 
 The suite is expected to stay at **80%+** line coverage (`fail_under = 80`
 in `pyproject.toml`).
+
+## Release process
+
+Release changes are prepared and reviewed before a tag is created:
+
+1. On a release-preparation branch, run
+   `python3 scripts/release.py prepare X.Y.Z`.
+2. Replace the generated changelog placeholders with the reviewed release
+   notes, then run `python3 scripts/release.py check`.
+3. Open and merge the preparation PR.
+4. From the merged commit, create and push a signed tag:
+
+   ```bash
+   git tag -s vX.Y.Z -m "MonitorControl X.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+The tag workflow validates every version surface, runs the tests, and calls
+`scripts/build-release.sh`. The build script expects the `build` module to
+already be installed; it does not install dependencies. It creates a wheel,
+Python source distribution, full-repository source archive, and
+`SHA256SUMS`. RPM and Debian packages remain the primary release formats.
