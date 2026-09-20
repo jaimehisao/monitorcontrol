@@ -134,8 +134,8 @@ jobs:
         include:
           - target: ubuntu-24.04
             image: ubuntu:24.04
-          - target: debian-stable
-            image: debian:stable
+          - target: debian-13
+            image: debian:13
     container:
       image: ${{ matrix.image }}
     steps:
@@ -171,8 +171,8 @@ jobs:
         include:
           - target: ubuntu-24.04
             image: ubuntu:24.04
-          - target: debian-stable
-            image: debian:stable
+          - target: debian-13
+            image: debian:13
     container:
       image: ${{ matrix.image }}
     steps:

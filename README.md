@@ -60,8 +60,8 @@ sudo apt install monitorcontrol
 
 Those distro packages use system GTK 4 / PyGObject. Releases are gated by
 clean-container build, install, file, version, uninstall, and removal checks
-on Fedora 43 and 44, Ubuntu 24.04, and Debian stable. These are the explicitly
-supported package targets for this release series.
+on Fedora 43 and 44, Ubuntu 24.04, and Debian 13 (stable). These are the
+explicitly supported package targets for this release series.
 
 ### Build packages locally
 
