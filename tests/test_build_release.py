@@ -21,6 +21,7 @@ class BuildReleaseTest(unittest.TestCase):
             scripts = repository / "scripts"
             scripts.mkdir()
             shutil.copy2(ROOT / "scripts/build-release.sh", scripts)
+            shutil.copy2(ROOT / "scripts/build-source-archive.sh", scripts)
             (scripts / "release.py").write_text("# test stub\n", encoding="utf-8")
             (repository / "pyproject.toml").write_text(
                 '[project]\nname = "monitorcontrol"\nversion = "1.2.3"\n',

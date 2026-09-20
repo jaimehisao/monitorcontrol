@@ -5,9 +5,19 @@ Maintainer: MonitorControl contributors <jaimehisao@users.noreply.github.com>
 Build-Depends:
  debhelper-compat (= 13),
  dh-python,
+ pybuild-plugin-pyproject,
  python3-all,
  python3-setuptools,
- python3-gi
+ python3-wheel,
+ python3-gi,
+ python3-gi-cairo,
+ gir1.2-gtk-4.0,
+ gir1.2-adw-1,
+ xvfb,
+ xauth,
+ git,
+ acl,
+ util-linux
 Standards-Version: 4.7.0
 Homepage: https://github.com/jaimehisao/monitorcontrol
 Rules-Requires-Root: no
@@ -17,14 +27,15 @@ Architecture: all
 Depends:
  ${misc:Depends},
  ${python3:Depends},
+ adduser,
  python3-gi,
  python3-gi-cairo,
  gir1.2-gtk-4.0,
  gir1.2-adw-1
-Description: brightness, contrast, and volume for any plugged-in display
+Description: brightness, contrast, and volume for plugged-in displays
  MonitorControl talks DDC/CI (VESA MCCS) to external monitors and uses
  /sys/class/backlight for laptop panels. Brightness keys, an on-screen
- HUD, and a GNOME Quick Settings slider.
+ HUD, and a GNOME Quick Settings slider are supported.
  .
  GTK 4 and libadwaita come from the distribution. This package is not
- the PyInstaller one-file binary.
+ a PyInstaller one-file binary.

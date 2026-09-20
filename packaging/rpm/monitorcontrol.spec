@@ -1,15 +1,15 @@
-# COPR / Fedora: python app using distro GTK 4 + PyGObject (not PyInstaller).
-# Build from a GitHub tag: Source0 is the GitHub archive.
+# Fedora package built from the canonical committed release source archive.
 Name:           monitorcontrol
 Version:        1.0.0
 Release:        1%{?dist}
 Summary:        Brightness, contrast, and volume for any plugged-in display
 License:        MIT
 URL:            https://github.com/jaimehisao/monitorcontrol
-Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
+Source0:        %{name}-%{version}-source.tar.gz
 
 BuildArch:      noarch
 BuildRequires:  python3-devel
+BuildRequires:  pyproject-rpm-macros
 BuildRequires:  python3-gobject
 BuildRequires:  gtk4
 BuildRequires:  libadwaita
@@ -79,5 +79,5 @@ getent group i2c >/dev/null || groupadd -r i2c
 %{_datadir}/gnome-shell/extensions/monitorcontrol@monitorcontrol.dev/
 
 %changelog
-* Thu Sep 11 2026 MonitorControl contributors <jaimehisao@users.noreply.github.com> - 1.0.0-1
+* Fri Sep 11 2026 MonitorControl contributors <jaimehisao@users.noreply.github.com> - 1.0.0-1
 - Initial COPR package.

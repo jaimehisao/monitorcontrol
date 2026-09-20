@@ -36,7 +36,7 @@ They still require GTK 4, libadwaita, and PyGObject from the distribution:
 pip install monitorcontrol-*-py3-none-any.whl
 ```
 
-## Fedora (dnf) and Ubuntu (apt)
+## Fedora (dnf), Ubuntu, and Debian (apt)
 
 The license is **MIT**: anyone can use, copy, and package this, including
 Fedora and Debian.
@@ -58,8 +58,34 @@ sudo add-apt-repository ppa:<you>/monitorcontrol
 sudo apt install monitorcontrol
 ```
 
-Those distro packages use system GTK 4 / PyGObject. Build an RPM locally with
-`./packaging/rpm/build.sh` on Fedora.
+Those distro packages use system GTK 4 / PyGObject. Releases are gated by
+clean-container build, install, file, version, uninstall, and removal checks
+on Fedora 43 and 44, Ubuntu 24.04, and Debian stable. These are the explicitly
+supported package targets for this release series.
+
+### Build packages locally
+
+Both package formats are built from the same committed-tree archive. This
+keeps RPM, DEB, and release source contents identical and intentionally
+excludes uncommitted files:
+
+```bash
+./scripts/build-source-archive.sh dist
+
+# Fedora, after installing the RPM BuildRequires from the spec:
+./packaging/rpm/build.sh
+# Outputs: dist/packages/rpm/{rpm,srpm}/
+
+# Debian/Ubuntu, after installing the Build-Depends from debian/control:
+sudo apt-get build-dep .
+./packaging/debian/build.sh
+# Outputs: dist/packages/debian/{binary,source}/
+```
+
+With no archive argument, either package wrapper refreshes the canonical
+archive from `HEAD`. Run these commands from a committed revision: packaging
+never substitutes a dirty working tree. CI performs the authoritative clean
+install and uninstall tests; no publishing credentials are needed.
 
 It does not have a per-model database. External monitors are driven with
 standard DDC/CI (VESA MCCS VCP codes) and probed for the features they

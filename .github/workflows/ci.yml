@@ -10,7 +10,25 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
+  source:
+    name: Canonical source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build committed source archive
+        run: ./scripts/build-source-archive.sh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: monitorcontrol-source
+          path: dist/monitorcontrol-*-source.tar.gz
+          if-no-files-found: error
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -50,20 +68,125 @@ jobs:
           xvfb-run -a .venv/bin/coverage run --source=src/monitorcontrol -m unittest discover -s tests
           .venv/bin/coverage report
 
-  rpm:
-    name: Fedora RPM
+  build-rpm:
+    name: Build Fedora ${{ matrix.version }} packages
+    needs: source
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["43", "44"]
     container:
-      image: fedora:latest
+      image: fedora:${{ matrix.version }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          fetch-depth: 0
+          name: monitorcontrol-source
+          path: dist
       - name: Build RPM
         run: |
-          dnf -y install rpm-build python3-devel python3-pip \
+          dnf -y install rpm-build python3-devel \
             python3-setuptools python3-gobject gtk4 libadwaita \
             python3-wheel python3-build pyproject-rpm-macros \
-            systemd-rpm-macros tar
-          chmod +x packaging/rpm/build.sh
-          ./packaging/rpm/build.sh
+            systemd-rpm-macros
+          archive="$(./scripts/select-package.sh dist 'monitorcontrol-*-source.tar.gz')"
+          PACKAGE_OUTPUT_DIR="dist/packages/fedora-${{ matrix.version }}" \
+            ./packaging/rpm/build.sh "$archive"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: monitorcontrol-fedora-${{ matrix.version }}
+          path: dist/packages/fedora-${{ matrix.version }}/
+          if-no-files-found: error
+
+  validate-rpm:
+    name: Clean install Fedora ${{ matrix.version }}
+    needs: build-rpm
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["43", "44"]
+    container:
+      image: fedora:${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: monitorcontrol-fedora-${{ matrix.version }}
+          path: package-output
+      - name: Install, verify, and uninstall RPM
+        run: |
+          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          rpm_file="$(./scripts/select-package.sh package-output/rpm 'monitorcontrol-*.noarch.rpm')"
+          dnf -y install "$rpm_file"
+          ./scripts/package-smoke-test.sh installed "$version"
+          dnf -y remove monitorcontrol
+          ./scripts/package-smoke-test.sh removed "$version"
+
+  build-deb:
+    name: Build ${{ matrix.target }} packages
+    needs: source
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ubuntu-24.04
+            image: ubuntu:24.04
+          - target: debian-stable
+            image: debian:stable
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: monitorcontrol-source
+          path: dist
+      - name: Install package build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential dpkg-dev
+          DEBIAN_FRONTEND=noninteractive apt-get build-dep -y .
+      - name: Build binary and source package
+        run: |
+          archive="$(./scripts/select-package.sh dist 'monitorcontrol-*-source.tar.gz')"
+          PACKAGE_OUTPUT_DIR="dist/packages/${{ matrix.target }}" \
+            ./packaging/debian/build.sh "$archive"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: monitorcontrol-${{ matrix.target }}
+          path: dist/packages/${{ matrix.target }}/
+          if-no-files-found: error
+
+  validate-deb:
+    name: Clean install ${{ matrix.target }}
+    needs: build-deb
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ubuntu-24.04
+            image: ubuntu:24.04
+          - target: debian-stable
+            image: debian:stable
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: monitorcontrol-${{ matrix.target }}
+          path: package-output
+      - name: Install, verify, and uninstall DEB
+        run: |
+          apt-get update
+          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          deb_file="$(./scripts/select-package.sh package-output/binary 'monitorcontrol_*_all.deb')"
+          DEBIAN_FRONTEND=noninteractive apt-get install -y "./$deb_file"
+          ./scripts/package-smoke-test.sh installed "$version"
+          DEBIAN_FRONTEND=noninteractive apt-get purge -y monitorcontrol
+          ./scripts/package-smoke-test.sh removed "$version"

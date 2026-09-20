@@ -4,11 +4,13 @@ outdir ?= .
 
 .PHONY: srpm
 srpm:
-	dnf -y install git-core rpm-build python3 python3-tomllib 2>/dev/null || \
-	  dnf -y install git-core rpm-build python3
-	version=$$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-	git archive --prefix=monitorcontrol-$${version}/ -o /tmp/monitorcontrol-$${version}.tar.gz HEAD
+	dnf -y install git-core rpm-build python3 python3-tomllib \
+	  pyproject-rpm-macros 2>/dev/null || \
+	  dnf -y install git-core rpm-build python3 pyproject-rpm-macros
+	rm -rf /tmp/monitorcontrol-copr-source
+	mkdir -p /tmp/monitorcontrol-copr-source
+	./scripts/build-source-archive.sh /tmp/monitorcontrol-copr-source
 	rpmbuild -bs \
-	  --define "_sourcedir /tmp" \
+	  --define "_sourcedir /tmp/monitorcontrol-copr-source" \
 	  --define "_srcrpmdir $(outdir)" \
 	  packaging/rpm/monitorcontrol.spec

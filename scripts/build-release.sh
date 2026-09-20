@@ -17,11 +17,7 @@ mkdir -p dist
 "$PYTHON" -m build --outdir dist
 
 source_archive="monitorcontrol-${version}-source.tar.gz"
-git archive \
-  --format=tar.gz \
-  --prefix="monitorcontrol-${version}/" \
-  --output="dist/${source_archive}" \
-  HEAD
+PYTHON="$PYTHON" ./scripts/build-source-archive.sh dist
 
 artifacts=(
   "monitorcontrol-${version}-py3-none-any.whl"
