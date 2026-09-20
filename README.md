@@ -1,3 +1,9 @@
+<div align="center">
+
+![MonitorControl](docs/logo.png)
+
+</div>
+
 # MonitorControl for Linux
 
 [![CI](https://github.com/jaimehisao/monitorcontrol/actions/workflows/ci.yml/badge.svg)](https://github.com/jaimehisao/monitorcontrol/actions/workflows/ci.yml)
@@ -7,6 +13,14 @@ Control brightness, contrast, and volume on **whatever is plugged in** —
 the way [MonitorControl](https://github.com/MonitorControl/MonitorControl)
 does on macOS: keys, an on-screen HUD, and a slider where the desktop
 already puts brightness.
+
+<div align="center">
+
+![Control window](docs/screenshots/window.png)
+
+![On-screen brightness overlay](docs/screenshots/osd.png)
+
+</div>
 
 ## Downloads
 
@@ -28,6 +42,32 @@ from a PR, not from a direct push to `main`:
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+## Fedora (dnf) and Ubuntu (apt)
+
+The license is **MIT**: anyone can use, copy, and package this, including
+Fedora and Debian.
+
+**COPR** is Fedora’s extra-package builder. You create a project once at
+[copr.fedorainfracloud.org](https://copr.fedorainfracloud.org/), point it
+at this GitHub repo (it uses `.copr/Makefile`). After a successful build:
+
+```bash
+sudo dnf copr enable <you>/monitorcontrol
+sudo dnf install monitorcontrol
+```
+
+**PPA** is the Ubuntu equivalent on Launchpad. `debian/` is the source
+package. After you publish the PPA:
+
+```bash
+sudo add-apt-repository ppa:<you>/monitorcontrol
+sudo apt install monitorcontrol
+```
+
+Those distro packages use system GTK 4 / PyGObject, not the GitHub
+PyInstaller binary. Build an RPM locally with
+`./packaging/rpm/build.sh` on Fedora.
 
 It does not have a per-model database. External monitors are driven with
 standard DDC/CI (VESA MCCS VCP codes) and probed for the features they

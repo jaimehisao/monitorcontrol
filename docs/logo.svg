@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bezel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a4d52"/>
+      <stop offset="1" stop-color="#2c2e32"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="68%" cy="48%" r="42%">
+      <stop offset="0" stop-color="#f4d35e" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#f4d35e" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#2a2c2e"/>
+  <rect x="22" y="24" width="84" height="62" rx="8" fill="url(#bezel)"/>
+  <rect x="28" y="30" width="72" height="50" rx="4" fill="#14161a"/>
+  <rect x="28" y="30" width="72" height="50" rx="4" fill="url(#glow)"/>
+  <g transform="translate(80 52)" fill="#f4d35e">
+    <circle r="8"/>
+    <g>
+      <polygon points="0,-18 2.4,-11 -2.4,-11"/>
+      <polygon points="0,18 2.4,11 -2.4,11"/>
+      <polygon points="18,0 11,2.4 11,-2.4"/>
+      <polygon points="-18,0 -11,2.4 -11,-2.4"/>
+      <polygon points="12.7,-12.7 10.2,-7.2 7.2,-10.2"/>
+      <polygon points="-12.7,12.7 -10.2,7.2 -7.2,10.2"/>
+      <polygon points="12.7,12.7 7.2,10.2 10.2,7.2"/>
+      <polygon points="-12.7,-12.7 -7.2,-10.2 -10.2,-7.2"/>
+    </g>
+  </g>
+  <rect x="58" y="86" width="12" height="10" rx="2" fill="#3a3d42"/>
+  <rect x="44" y="96" width="40" height="7" rx="3" fill="#3a3d42"/>
+</svg>
