@@ -117,8 +117,8 @@ jobs:
           path: package-output
       - name: Install, verify, and uninstall RPM
         run: |
-          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
           rpm_file="$(./scripts/select-package.sh package-output/rpm 'monitorcontrol-*.noarch.rpm')"
+          version="$(rpm -qp --qf '%{VERSION}' "$rpm_file")"
           dnf -y install "$rpm_file"
           ./scripts/package-smoke-test.sh installed "$version"
           dnf -y remove monitorcontrol
@@ -184,8 +184,9 @@ jobs:
       - name: Install, verify, and uninstall DEB
         run: |
           apt-get update
-          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
           deb_file="$(./scripts/select-package.sh package-output/binary 'monitorcontrol_*_all.deb')"
+          version="$(dpkg-deb -f "$deb_file" Version)"
+          version="${version%%-*}"
           DEBIAN_FRONTEND=noninteractive apt-get install -y "./$deb_file"
           ./scripts/package-smoke-test.sh installed "$version"
           DEBIAN_FRONTEND=noninteractive apt-get purge -y monitorcontrol
