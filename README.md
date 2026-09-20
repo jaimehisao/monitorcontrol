@@ -33,8 +33,11 @@ Python wheels and source distributions are secondary artifacts attached to
 They still require GTK 4, libadwaita, and PyGObject from the distribution:
 
 ```bash
-pip install monitorcontrol-*-py3-none-any.whl
+pip install monitorcontrol_linux-*-py3-none-any.whl
 ```
+
+The PyPI distribution is named `monitorcontrol-linux`; imports and the
+installed command remain `monitorcontrol`.
 
 ## Fedora (dnf), Ubuntu, and Debian (apt)
 
@@ -196,8 +199,8 @@ Release changes are prepared and reviewed before a tag is created:
    git push origin vX.Y.Z
    ```
 
-The tag workflow validates every version surface, runs the tests, and calls
-`scripts/build-release.sh`. The build script expects the `build` module to
-already be installed; it does not install dependencies. It creates a wheel,
-Python source distribution, full-repository source archive, and
-`SHA256SUMS`. RPM and Debian packages remain the primary release formats.
+The protected tag workflow builds and validates every supported package,
+creates a draft GitHub Release, publishes through PyPI, COPR, and Launchpad,
+verifies those public repositories, and only then publishes the draft. See
+[`docs/releasing.md`](docs/releasing.md) for configuration, dry runs, recovery,
+and the immutable patch-release policy.

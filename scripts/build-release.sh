@@ -20,8 +20,8 @@ source_archive="monitorcontrol-${version}-source.tar.gz"
 PYTHON="$PYTHON" ./scripts/build-source-archive.sh dist
 
 artifacts=(
-  "monitorcontrol-${version}-py3-none-any.whl"
-  "monitorcontrol-${version}.tar.gz"
+  "monitorcontrol_linux-${version}-py3-none-any.whl"
+  "monitorcontrol_linux-${version}.tar.gz"
   "$source_archive"
 )
 for artifact in "${artifacts[@]}"; do

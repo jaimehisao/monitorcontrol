@@ -32,7 +32,7 @@ class ReleaseToolTest(unittest.TestCase):
     def _write_release_tree(self, version: str) -> None:
         self._write(
             "pyproject.toml",
-            f'[project]\nname = "monitorcontrol"\nversion = "{version}"\n',
+            f'[project]\nname = "monitorcontrol-linux"\nversion = "{version}"\n',
         )
         self._write(
             "src/monitorcontrol/__init__.py", f'__version__ = "{version}"\n'
@@ -57,6 +57,16 @@ class ReleaseToolTest(unittest.TestCase):
 
     def test_check_accepts_matching_versions_and_tag(self) -> None:
         self.assertEqual(release.check(self.root, "v1.0.0"), "1.0.0")
+
+    def test_check_requires_unoccupied_python_distribution_name(self) -> None:
+        self._write(
+            "pyproject.toml",
+            '[project]\nname = "monitorcontrol"\nversion = "1.0.0"\n',
+        )
+        with self.assertRaisesRegex(
+            release.ReleaseError, "monitorcontrol-linux"
+        ):
+            release.check(self.root)
 
     def test_check_uses_release_tag_from_environment(self) -> None:
         with mock.patch.dict("os.environ", {"GITHUB_REF_NAME": "v2.0.0"}):

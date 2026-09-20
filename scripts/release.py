@@ -27,6 +27,7 @@ MAINTAINER = (
 )
 UNRELEASED_PLACEHOLDER = "- Add changes here."
 RELEASE_PLACEHOLDER = "- Describe notable changes for this release."
+DISTRIBUTION_NAME = "monitorcontrol-linux"
 
 
 class ReleaseError(ValueError):
@@ -80,6 +81,21 @@ def read_versions(root: Path) -> dict[str, str]:
     return sources
 
 
+def check_distribution_name(root: Path) -> None:
+    pyproject_path = root / "pyproject.toml"
+    try:
+        project = tomllib.loads(_read(pyproject_path))["project"]
+        name = project["name"]
+    except (tomllib.TOMLDecodeError, KeyError, TypeError) as error:
+        raise ReleaseError(
+            f"cannot read project.name from {pyproject_path}: {error}"
+        ) from error
+    if name != DISTRIBUTION_NAME:
+        raise ReleaseError(
+            f"Python distribution must be {DISTRIBUTION_NAME!r}, got {name!r}"
+        )
+
+
 def _match_version(path: Path, pattern: str) -> str:
     match = re.search(pattern, _read(path), re.MULTILINE)
     if not match:
@@ -88,6 +104,7 @@ def _match_version(path: Path, pattern: str) -> str:
 
 
 def check(root: Path, tag: str | None = None) -> str:
+    check_distribution_name(root)
     versions = read_versions(root)
     distinct = set(versions.values())
     if len(distinct) != 1:

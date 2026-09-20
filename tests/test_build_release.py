@@ -24,7 +24,7 @@ class BuildReleaseTest(unittest.TestCase):
             shutil.copy2(ROOT / "scripts/build-source-archive.sh", scripts)
             (scripts / "release.py").write_text("# test stub\n", encoding="utf-8")
             (repository / "pyproject.toml").write_text(
-                '[project]\nname = "monitorcontrol"\nversion = "1.2.3"\n',
+                '[project]\nname = "monitorcontrol-linux"\nversion = "1.2.3"\n',
                 encoding="utf-8",
             )
             (repository / "tracked.txt").write_text("tracked\n", encoding="utf-8")
@@ -37,8 +37,8 @@ class BuildReleaseTest(unittest.TestCase):
                 'if [ "$1" = "-c" ]; then echo 1.2.3; exit 0; fi\n'
                 'if [ "$1" = "-m" ] && [ "$2" = "build" ]; then\n'
                 "  mkdir -p dist\n"
-                "  : > dist/monitorcontrol-1.2.3-py3-none-any.whl\n"
-                "  : > dist/monitorcontrol-1.2.3.tar.gz\n"
+                "  : > dist/monitorcontrol_linux-1.2.3-py3-none-any.whl\n"
+                "  : > dist/monitorcontrol_linux-1.2.3.tar.gz\n"
                 "  exit 0\n"
                 "fi\n"
                 'echo "unexpected fake Python arguments: $*" >&2\n'
@@ -91,7 +91,7 @@ class BuildReleaseTest(unittest.TestCase):
                 encoding="utf-8"
             )
             self.assertEqual(len(checksums.splitlines()), 3)
-            self.assertNotIn("monitorcontrol-1.2.3-linux", checksums)
+            self.assertIn("monitorcontrol_linux-1.2.3", checksums)
 
     @staticmethod
     def _git(repository: Path, *arguments: str) -> None:
