@@ -6,4 +6,5 @@ export PYBUILD_SYSTEM=pyproject
 	dh $@ --with python3 --buildsystem=pybuild
 
 override_dh_auto_test:
-	:
+	runuser -u nobody -- env HOME=/tmp PYTHONPATH=$(CURDIR)/src \
+		xvfb-run -a python3 -m unittest discover -s tests -v

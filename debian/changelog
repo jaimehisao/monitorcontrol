@@ -1,5 +1,5 @@
 monitorcontrol (1.0.0-1) UNRELEASED; urgency=medium
 
-  * Initial packaging for a Launchpad PPA.
+  * Initial Debian and Ubuntu package.
 
- -- MonitorControl contributors <jaimehisao@users.noreply.github.com>  Thu, 11 Sep 2026 00:00:00 +0000
+ -- MonitorControl contributors <jaimehisao@users.noreply.github.com>  Fri, 11 Sep 2026 00:00:00 +0000

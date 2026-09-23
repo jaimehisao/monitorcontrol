@@ -24,25 +24,22 @@ already puts brightness.
 
 ## Downloads
 
-Binaries and pip packages are attached to [GitHub Releases](https://github.com/jaimehisao/monitorcontrol/releases).
+RPM and Debian packages are the primary installation formats. They use the
+distribution's GTK 4, libadwaita, and PyGObject packages. See the Fedora and
+Ubuntu packaging notes below.
+
+Python wheels and source distributions are secondary artifacts attached to
+[GitHub Releases](https://github.com/jaimehisao/monitorcontrol/releases).
+They still require GTK 4, libadwaita, and PyGObject from the distribution:
 
 ```bash
-# single-file executable (needs system GTK 4 / libadwaita / PyGObject)
-chmod +x monitorcontrol-*-linux
-./monitorcontrol-*-linux list
-
-# or pip
-pip install monitorcontrol-*-py3-none-any.whl
+pip install monitorcontrol_linux-*-py3-none-any.whl
 ```
 
-Publish a release by pushing a version tag that matches `pyproject.toml`:
+The PyPI distribution is named `monitorcontrol-linux`; imports and the
+installed command remain `monitorcontrol`.
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-## Fedora (dnf) and Ubuntu (apt)
+## Fedora (dnf), Ubuntu, and Debian (apt)
 
 The license is **MIT**: anyone can use, copy, and package this, including
 Fedora and Debian.
@@ -64,9 +61,34 @@ sudo add-apt-repository ppa:<you>/monitorcontrol
 sudo apt install monitorcontrol
 ```
 
-Those distro packages use system GTK 4 / PyGObject, not the GitHub
-PyInstaller binary. Build an RPM locally with
-`./packaging/rpm/build.sh` on Fedora.
+Those distro packages use system GTK 4 / PyGObject. Releases are gated by
+clean-container build, install, file, version, uninstall, and removal checks
+on Fedora 43 and 44, Ubuntu 24.04, and Debian 13 (stable). These are the
+explicitly supported package targets for this release series.
+
+### Build packages locally
+
+Both package formats are built from the same committed-tree archive. This
+keeps RPM, DEB, and release source contents identical and intentionally
+excludes uncommitted files:
+
+```bash
+./scripts/build-source-archive.sh dist
+
+# Fedora, after installing the RPM BuildRequires from the spec:
+./packaging/rpm/build.sh
+# Outputs: dist/packages/rpm/{rpm,srpm}/
+
+# Debian/Ubuntu, after installing the Build-Depends from debian/control:
+sudo apt-get build-dep .
+./packaging/debian/build.sh
+# Outputs: dist/packages/debian/{binary,source}/
+```
+
+With no archive argument, either package wrapper refreshes the canonical
+archive from `HEAD`. Run these commands from a committed revision: packaging
+never substitutes a dirty working tree. CI performs the authoritative clean
+install and uninstall tests; no publishing credentials are needed.
 
 It does not have a per-model database. External monitors are driven with
 standard DDC/CI (VESA MCCS VCP codes) and probed for the features they
@@ -160,3 +182,25 @@ PYTHONPATH=src .venv/bin/coverage report
 
 The suite is expected to stay at **80%+** line coverage (`fail_under = 80`
 in `pyproject.toml`).
+
+## Release process
+
+Release changes are prepared and reviewed before a tag is created:
+
+1. On a release-preparation branch, run
+   `python3 scripts/release.py prepare X.Y.Z`.
+2. Replace the generated changelog placeholders with the reviewed release
+   notes, then run `python3 scripts/release.py check`.
+3. Open and merge the preparation PR.
+4. From the merged commit, create and push a signed tag:
+
+   ```bash
+   git tag -s vX.Y.Z -m "MonitorControl X.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+The protected tag workflow builds and validates every supported package,
+creates a draft GitHub Release, publishes through PyPI, COPR, and Launchpad,
+verifies those public repositories, and only then publishes the draft. See
+[`docs/releasing.md`](docs/releasing.md) for configuration, dry runs, recovery,
+and the immutable patch-release policy.

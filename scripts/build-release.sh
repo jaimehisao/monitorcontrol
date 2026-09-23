@@ -1,40 +1,39 @@
 #!/usr/bin/env bash
-# Build wheel, sdist, and a single-file zipapp "binary" into dist/.
+# Build the canonical source and Python distribution artifacts into dist/.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
-version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+PYTHON="${PYTHON:-python3}"
+"$PYTHON" scripts/release.py check
+version="$("$PYTHON" -c \
+  "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+
 echo "Building MonitorControl ${version}"
-
 rm -rf dist build
-mkdir -p dist build/zipapp
+mkdir -p dist
 
-python3 -m pip install --disable-pip-version-check -q build
-python3 -m build --outdir dist
+"$PYTHON" -m build --outdir dist
 
-cp -a src/monitorcontrol build/zipapp/monitorcontrol
-find build/zipapp -type d -name '__pycache__' -prune -exec rm -rf {} +
-find build/zipapp -name '*.py[co]' -delete
-python3 -m zipapp build/zipapp \
-  --python "/usr/bin/env python3" \
-  --main "monitorcontrol.cli:main" \
-  --compress \
-  --output "dist/monitorcontrol-${version}-linux"
-chmod +x "dist/monitorcontrol-${version}-linux"
+source_archive="monitorcontrol-${version}-source.tar.gz"
+PYTHON="$PYTHON" ./scripts/build-source-archive.sh dist
 
-# Unversioned name is handy for scripts; release uploads both.
-cp -a "dist/monitorcontrol-${version}-linux" dist/monitorcontrol
+artifacts=(
+  "monitorcontrol_linux-${version}-py3-none-any.whl"
+  "monitorcontrol_linux-${version}.tar.gz"
+  "$source_archive"
+)
+for artifact in "${artifacts[@]}"; do
+  if [[ ! -f "dist/${artifact}" ]]; then
+    echo "Expected artifact was not built: dist/${artifact}" >&2
+    exit 1
+  fi
+done
 
 (
   cd dist
-  sha256sum \
-    monitorcontrol \
-    "monitorcontrol-${version}-linux" \
-    "monitorcontrol-${version}-py3-none-any.whl" \
-    "monitorcontrol-${version}.tar.gz" \
-    > SHA256SUMS
+  sha256sum "${artifacts[@]}" > SHA256SUMS
 )
 
 echo "Artifacts:"
