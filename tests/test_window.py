@@ -51,6 +51,20 @@ class WindowSmokeTests(unittest.TestCase):
         self.assertEqual(called, [True])
         scale = window._scales[("DEL:U2720Q:AA", Feature.BRIGHTNESS)]
         scale.set_value(22)
+        from monitorcontrol.controller import Change
+
+        display = controller.displays[0]
+        window.apply_external(
+            [
+                Change(
+                    display,
+                    Feature.BRIGHTNESS,
+                    display.features[Feature.BRIGHTNESS].with_percent(33),
+                )
+            ]
+        )
+        self.assertEqual(int(scale.get_value()), 33)
+        window._on_refresh(None)
         empty = Controller(discover_fn=lambda: [])
         empty.refresh()
         window2 = ControlWindow(app, empty)

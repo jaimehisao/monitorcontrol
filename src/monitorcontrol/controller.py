@@ -58,9 +58,13 @@ class Controller:
         self._hardware: dict[tuple[str, Feature], FeatureState] = {}
         self._lock = threading.Lock()
         self._listeners: list[Callable[[list[Change]], None]] = []
+        self._refresh_listeners: list[Callable[[list[Display]], None]] = []
 
     def subscribe(self, fn: Callable[[list[Change]], None]) -> None:
         self._listeners.append(fn)
+
+    def subscribe_refresh(self, fn: Callable[[list[Display]], None]) -> None:
+        self._refresh_listeners.append(fn)
 
     def _notify(self, changes: list[Change]) -> None:
         if not changes:
@@ -68,24 +72,41 @@ class Controller:
         for fn in list(self._listeners):
             fn(changes)
 
-    def refresh(self) -> list[Display]:
+    def refresh(self, *, block: bool = True) -> list[Display]:
+        if not block:
+            self._scheduler.call_later(0, self._refresh_now)
+            with self._lock:
+                return list(self.displays)
+        return self._refresh_now()
+
+    def _refresh_now(self) -> list[Display]:
+        self._flush_io()
+        found = self._discover()
         with self._lock:
-            self._flush_locked()
-            for display in self.displays:
-                display.close()
-            self.displays = self._discover()
+            previous = list(self.displays)
+            self.displays = found
             self._remember_hardware()
-            return list(self.displays)
+            current = list(self.displays)
+        for display in previous:
+            display.close()
+        for fn in list(self._refresh_listeners):
+            fn(current)
+        return current
+
+    def flush(self) -> None:
+        self._flush_io()
 
     def close(self) -> None:
         with self._lock:
             if self._flush_handle is not None:
                 self._scheduler.cancel(self._flush_handle)
                 self._flush_handle = None
-            self._flush_locked()
-            for display in self.displays:
-                display.close()
+        self._flush_io()
+        with self._lock:
+            previous = list(self.displays)
             self.displays = []
+        for display in previous:
+            display.close()
 
     def find(self, identity: str) -> Display:
         for display in self.displays:
@@ -127,10 +148,10 @@ class Controller:
                 display.features[feature] = target
                 self._pending[(display_id, feature)] = target.current
                 changes.append(Change(display=display, feature=feature, state=target))
-            if immediate:
-                self._flush_locked()
-            else:
+            if not immediate:
                 self._arm_flush()
+        if immediate:
+            self._flush_io()
         if notify:
             self._notify(changes)
         return changes
@@ -166,8 +187,7 @@ class Controller:
         )
 
     def _flush(self) -> None:
-        with self._lock:
-            self._flush_locked()
+        self._flush_io()
 
     def _remember_hardware(self) -> None:
         self._hardware = {
@@ -176,26 +196,54 @@ class Controller:
             for feature, state in display.features.items()
         }
 
-    def _flush_locked(self) -> None:
-        pending = self._pending
-        self._pending = {}
-        self._flush_handle = None
-        by_id = {d.identity: d for d in self.displays}
-        for (identity, feature), value in pending.items():
-            display = by_id.get(identity)
-            if display is None:
-                continue
-            try:
-                display.set_raw(feature, value)
-            except Exception as exc:
-                previous = getattr(self, "_hardware", {}).get((identity, feature))
-                if previous is not None and feature in display.features:
-                    display.features[feature] = previous
-                message = f"Could not update {display.name}: {exc}"
-                display.warning = message
-                self.last_write_error = message
-                continue
-            self.last_write_error = None
-            if not hasattr(self, "_hardware"):
-                self._hardware = {}
-            self._hardware[(identity, feature)] = display.features[feature]
+    def _flush_io(self) -> None:
+        with self._lock:
+            pending = self._pending
+            self._pending = {}
+            self._flush_handle = None
+            grouped: dict[str, list[tuple[Display, Feature, int]]] = {}
+            for (identity, feature), value in pending.items():
+                display = next((item for item in self.displays if item.identity == identity), None)
+                if display is None:
+                    continue
+                grouped.setdefault(identity, []).append((display, feature, value))
+
+        def run_group(items: list[tuple[Display, Feature, int]]) -> list[tuple]:
+            results = []
+            for display, feature, value in items:
+                try:
+                    display.set_raw(feature, value)
+                except Exception as exc:
+                    results.append((display, feature, exc))
+                else:
+                    results.append((display, feature, None))
+            return results
+
+        results: list[tuple] = []
+        groups = list(grouped.values())
+        if len(groups) <= 1:
+            if groups:
+                results.extend(run_group(groups[0]))
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=min(4, len(groups))) as pool:
+                for part in pool.map(run_group, groups):
+                    results.extend(part)
+
+        corrections: list[Change] = []
+        with self._lock:
+            for display, feature, error in results:
+                if error is not None:
+                    previous = self._hardware.get((display.identity, feature))
+                    if previous is not None and feature in display.features:
+                        display.features[feature] = previous
+                        corrections.append(Change(display=display, feature=feature, state=previous))
+                    message = f"Could not update {display.name}: {error}"
+                    display.warning = message
+                    self.last_write_error = message
+                    continue
+                self.last_write_error = None
+                self._hardware[(display.identity, feature)] = display.features[feature]
+        if corrections:
+            self._notify(corrections)

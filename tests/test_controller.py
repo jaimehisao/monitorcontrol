@@ -125,6 +125,42 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(self.dell.features[Feature.BRIGHTNESS].percent, 40)
         self.assertIn("bus down", self.ctrl.last_write_error or "")
 
+    def test_lock_is_released_before_the_hardware_write(self) -> None:
+        def setter(_feature: Feature, _value: int) -> None:
+            self.assertFalse(self.ctrl._lock.locked())
+
+        self.dell._set = setter
+        self.ctrl.set_percent(self.dell.identity, Feature.BRIGHTNESS, 12, immediate=True)
+
+    def test_async_refresh_returns_before_the_probe(self) -> None:
+        probed: list[int] = []
+
+        def discover() -> list[Display]:
+            probed.append(1)
+            return [self.dell]
+
+        ctrl = Controller(discover_fn=discover, scheduler=self.sched)
+        self.assertEqual(ctrl.refresh(block=False), [])
+        self.assertEqual(probed, [])
+        self.sched.fire()
+        self.assertEqual(ctrl.displays, [self.dell])
+
+    def test_independent_displays_write_at_the_same_time(self) -> None:
+        import threading
+
+        barrier = threading.Barrier(2, timeout=2)
+
+        def setter(_feature: Feature, _value: int) -> None:
+            barrier.wait()
+
+        self.dell._set = setter
+        self.lg._set = setter
+        self.ctrl.set_percent(self.dell.identity, Feature.BRIGHTNESS, 11)
+        self.ctrl.set_percent(self.lg.identity, Feature.BRIGHTNESS, 22)
+        self.sched.fire()
+        self.assertEqual(self.dell.features[Feature.BRIGHTNESS].percent, 11)
+        self.assertEqual(self.lg.features[Feature.BRIGHTNESS].percent, 22)
+
     def test_clamps_at_zero_and_hundred(self) -> None:
         self.ctrl.adjust(Feature.BRIGHTNESS, -100, immediate=True)
         self.assertEqual(self.dell.features[Feature.BRIGHTNESS].percent, 0)

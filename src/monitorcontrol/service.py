@@ -54,9 +54,7 @@ class MonitorService:
         return [display_payload(display) for display in self.controller.displays]
 
     def set_percent(self, identity: str, feature: str, percent: int) -> list[dict[str, Any]]:
-        changes = self.controller.set_percent(
-            identity, parse_feature(feature), percent, immediate=True
-        )
+        changes = self.controller.set_percent(identity, parse_feature(feature), percent)
         return [
             {
                 "id": change.display.identity,
@@ -69,9 +67,7 @@ class MonitorService:
 
     def adjust(self, feature: str, delta: int, identity: str = "") -> list[dict[str, Any]]:
         ident = identity or None
-        changes = self.controller.adjust(
-            parse_feature(feature), delta, identity=ident, immediate=True
-        )
+        changes = self.controller.adjust(parse_feature(feature), delta, identity=ident)
         return [
             {
                 "id": change.display.identity,
@@ -82,8 +78,8 @@ class MonitorService:
             for change in changes
         ]
 
-    def refresh(self) -> list[dict[str, Any]]:
-        self.controller.refresh()
+    def refresh(self, *, block: bool = True) -> list[dict[str, Any]]:
+        self.controller.refresh(block=block)
         return self.list_displays()
 
 

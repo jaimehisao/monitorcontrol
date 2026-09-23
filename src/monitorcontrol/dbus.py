@@ -7,7 +7,8 @@ share one parser. `dispatch` is the testable core; Gio export is a thin wrap.
 from __future__ import annotations
 
 import json
-from typing import Any
+from collections.abc import Callable
+from typing import Any, NamedTuple
 
 from monitorcontrol import APP_ID
 from monitorcontrol.service import MonitorService
@@ -55,7 +56,7 @@ def dispatch(service: MonitorService, method: str, args: tuple[Any, ...]) -> str
         feature, delta, identity = args
         return json.dumps(service.adjust(feature, int(delta), identity or ""))
     if method == "Refresh":
-        return json.dumps(service.refresh())
+        return json.dumps(service.refresh(block=False))
     raise ValueError(f"unknown method {method}")
 
 
@@ -74,8 +75,14 @@ def changes_payload(changes) -> str:
     return json.dumps(rows)
 
 
-def export_session(service: MonitorService, connection=None) -> tuple[int, object]:
-    """Register the object on a D-Bus connection. Returns the registration id."""
+class SessionBinding(NamedTuple):
+    registration: int
+    emit_changed: Callable[[str], None]
+    connection: object
+
+
+def export_session(service: MonitorService, connection=None) -> SessionBinding:
+    """Register the object on a D-Bus connection and keep the handles for shutdown."""
     from gi.repository import Gio, GLib
 
     if connection is None:
@@ -101,7 +108,7 @@ def export_session(service: MonitorService, connection=None) -> tuple[int, objec
             GLib.Variant("(s)", (payload,)),
         )
 
-    return registration, emit_changed
+    return SessionBinding(registration, emit_changed, connection)
 
 
 def own_bus_name(bus_name: str = BUS_NAME) -> int:

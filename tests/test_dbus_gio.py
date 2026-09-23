@@ -50,8 +50,9 @@ class GioHelperTests(unittest.TestCase):
         connection = MagicMock()
         connection.register_object.return_value = 3
         svc = MonitorService(Controller(discover_fn=lambda: []))
-        registration, _emit = export_session(svc, connection)
-        self.assertEqual(registration, 3)
+        binding = export_session(svc, connection)
+        self.assertEqual(binding.registration, 3)
+        self.assertIs(binding.connection, connection)
         args, _kwargs = connection.register_object.call_args
         on_method = args[2]
         invocation = MagicMock()

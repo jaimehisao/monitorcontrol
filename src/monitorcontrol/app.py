@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import gi
@@ -26,6 +27,8 @@ from monitorcontrol.paths import current_username, install_user_binary
 from monitorcontrol.service import MonitorService
 from monitorcontrol.settings_actions import SettingsActions
 from monitorcontrol.window import ControlWindow
+
+log = logging.getLogger(__name__)
 
 
 def _load_css() -> None:
@@ -58,38 +61,27 @@ class Application(Adw.Application):
         self._settings_dialog = None
         self._bootstrapping = False
         self._emit_changed = None
+        self._connection = None
+        self._registration: int | None = None
+        self._owner_id: int | None = None
+        self.integration_error: str | None = None
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
         _load_css()
         self.hold()
         self.controller = Controller(step=self.config.step, sync=self.config.sync)
-        self.controller.refresh()
         self.service = MonitorService(self.controller)
-
-        def publish(changes) -> None:
-            if not changes or self._emit_changed is None:
-                return
-            try:
-                self._emit_changed(changes_payload(changes))
-            except Exception:
-                pass
-
-        self.controller.subscribe(publish)
-        self._emit_changed = None
-        try:
-            _registration, emit_changed = export_session(self.service)
-            self._emit_changed = emit_changed
-            own_bus_name()
-        except Exception:
-            pass
+        self.controller.subscribe(self._on_changes)
+        self._export_session()
         follower = NativeBrightnessFollower(
             lambda percent: apply_native_percent(self.controller, percent)
         )
         try:
             attach_mutter(follower)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_integration(f"GNOME brightness follow is unavailable: {exc}")
+        self.controller.refresh(block=False)
 
     def do_activate(self) -> None:
         self._ensure_window()
@@ -112,7 +104,9 @@ class Application(Adw.Application):
         )
         self.win.on_sync_changed = self._persist_sync
         self.osd = Osd(self)
-        self.controller.subscribe(self.osd.show_changes)
+        if self.integration_error and self.win._banner is not None:
+            self.win._banner.set_title(self.integration_error)
+            self.win._banner.set_revealed(True)
 
     def _settings_actions(self) -> SettingsActions:
         from monitorcontrol.autostart import DEFAULT_DIR as AUTOSTART_DIR
@@ -188,7 +182,7 @@ class Application(Adw.Application):
         self.config = actions.config
         if self.controller is not None:
             self.controller.sync = self.config.sync
-            self.controller.refresh()
+            self.controller.refresh(block=False)
         if self.win is not None:
             self.win.rebuild()
             if result.i2c_error and self.win._banner:
@@ -201,7 +195,58 @@ class Application(Adw.Application):
             self._settings_dialog = SettingsDialog(self._settings_actions())
         self._settings_dialog.present(self.win)
 
+    def _on_changes(self, changes) -> None:
+        if not changes:
+            return
+
+        def apply() -> bool:
+            if self.osd is not None:
+                self.osd.show_changes(changes)
+            if self.win is not None:
+                self.win.apply_external(changes)
+            if self._emit_changed is not None:
+                try:
+                    self._emit_changed(changes_payload(changes))
+                except Exception as exc:
+                    self._note_integration(f"Could not publish a control change: {exc}")
+            return False
+
+        GLib.idle_add(apply)
+
+    def _export_session(self) -> None:
+        assert self.service is not None
+        try:
+            binding = export_session(self.service)
+            self._registration = binding.registration
+            self._connection = binding.connection
+            self._emit_changed = binding.emit_changed
+            owner = own_bus_name()
+            self._owner_id = owner if isinstance(owner, int) else None
+        except Exception as exc:
+            self._note_integration(f"Session control is unavailable: {exc}")
+
+    def _note_integration(self, message: str) -> None:
+        log.warning("%s", message)
+        self.integration_error = message
+        if self.win is not None and self.win._banner is not None:
+            self.win._banner.set_title(message)
+            self.win._banner.set_revealed(True)
+
     def do_shutdown(self) -> None:
+        if self._connection is not None and isinstance(self._registration, int):
+            try:
+                self._connection.unregister_object(self._registration)
+            except Exception:
+                log.warning("Could not unregister the session object", exc_info=True)
+        if isinstance(self._owner_id, int) and self._owner_id:
+            try:
+                Gio.bus_unown_name(self._owner_id)
+            except Exception:
+                log.warning("Could not release the session bus name", exc_info=True)
+        self._connection = None
+        self._registration = None
+        self._owner_id = None
+        self._emit_changed = None
         if self.controller is not None:
             self.controller.close()
             self.controller = None
