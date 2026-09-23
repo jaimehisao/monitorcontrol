@@ -17,6 +17,7 @@ jobs:
   source:
     name: Canonical source
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,6 +33,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -72,6 +74,7 @@ jobs:
     name: Build Fedora ${{ matrix.version }} packages
     needs: source
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -86,9 +89,10 @@ jobs:
           path: dist
       - name: Build RPM
         run: |
-          dnf -y install rpm-build python3-devel \
-            python3-setuptools python3-gobject gtk4 libadwaita \
-            python3-wheel python3-build pyproject-rpm-macros \
+          dnf -y install --setopt=install_weak_deps=False \
+            rpm-build python3-devel \
+            python3-setuptools python3-gobject cairo-gobject gobject-introspection gtk4 libadwaita \
+            python3-wheel python3-build python3-pip pyproject-rpm-macros \
             systemd-rpm-macros
           archive="$(./scripts/select-package.sh dist 'monitorcontrol-*-source.tar.gz')"
           PACKAGE_OUTPUT_DIR="dist/packages/fedora-${{ matrix.version }}" \
@@ -103,6 +107,7 @@ jobs:
     name: Clean install Fedora ${{ matrix.version }}
     needs: build-rpm
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -119,7 +124,7 @@ jobs:
         run: |
           rpm_file="$(./scripts/select-package.sh package-output/rpm 'monitorcontrol-*.noarch.rpm')"
           version="$(rpm -qp --qf '%{VERSION}' "$rpm_file")"
-          dnf -y install "$rpm_file"
+          dnf -y install --setopt=install_weak_deps=False "$rpm_file"
           ./scripts/package-smoke-test.sh installed "$version"
           dnf -y remove monitorcontrol
           ./scripts/package-smoke-test.sh removed "$version"
@@ -128,6 +133,7 @@ jobs:
     name: Build ${{ matrix.target }} packages
     needs: source
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -165,6 +171,7 @@ jobs:
     name: Clean install ${{ matrix.target }}
     needs: build-deb
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
