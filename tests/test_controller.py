@@ -108,6 +108,23 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(ctrl.displays, [])
         ctrl._notify([])
 
+    def test_refresh_flushes_pending_writes_before_replacing_displays(self) -> None:
+        self.ctrl.set_percent(self.dell.identity, Feature.BRIGHTNESS, 15)
+        self.assertEqual(self.dell.writes, [])
+        replacement = _display(self.dell.identity, self.dell.name, 15)
+        self.ctrl._discover = lambda: [replacement, self.lg]
+        self.ctrl.refresh()
+        self.assertEqual(self.dell.writes, [(Feature.BRIGHTNESS, 15)])
+
+    def test_failed_write_restores_the_previous_value(self) -> None:
+        def fail(feature: Feature, value: int) -> None:
+            raise OSError(f"bus down {value}")
+
+        self.dell._set = fail
+        self.ctrl.set_percent(self.dell.identity, Feature.BRIGHTNESS, 10, immediate=True)
+        self.assertEqual(self.dell.features[Feature.BRIGHTNESS].percent, 40)
+        self.assertIn("bus down", self.ctrl.last_write_error or "")
+
     def test_clamps_at_zero_and_hundred(self) -> None:
         self.ctrl.adjust(Feature.BRIGHTNESS, -100, immediate=True)
         self.assertEqual(self.dell.features[Feature.BRIGHTNESS].percent, 0)

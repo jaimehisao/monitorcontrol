@@ -260,9 +260,13 @@ def discover(
 
     permission_blocked = False
     claimed_buses: set[int] = set()
+    probed_buses: set[int] = set()
 
-    def try_bus(bus_number: int) -> DdcClient | dict | None:
+    def try_bus(bus_number: int) -> dict | None:
         nonlocal permission_blocked
+        if bus_number in probed_buses:
+            return None
+        probed_buses.add(bus_number)
         try:
             client = open_ddc(bus_number)
         except DdcPermissionError:
@@ -285,39 +289,29 @@ def discover(
             return None
         return {"client": client, "probed": probed}
 
+    # A DRM ddc symlink is the only safe connector-to-bus assignment.
+    # The first connector in sysfs order keeps a bus if two links collide.
+    connector_by_bus: dict[int, Connector] = {}
     for connector in externals:
         preferred = _bus_from_ddc_symlink(connector.sys_path)
-        candidates: list[int] = []
-        if preferred is not None:
-            candidates.append(preferred)
-        for bus in display_buses(i2c_class_root):
-            if bus.number not in candidates:
-                candidates.append(bus.number)
+        if preferred is not None and preferred not in connector_by_bus:
+            connector_by_bus[preferred] = connector
 
-        attached = False
-        for bus_number in candidates:
-            if bus_number in claimed_buses:
-                continue
-            result = try_bus(bus_number)
-            if not result:
-                continue
-            claimed_buses.add(bus_number)
-            displays.append(
-                _ddc_display(connector, bus_number, result["client"], result["probed"])
-            )
-            attached = True
-            break
-        if attached:
+    attached: set[str] = set()
+    for bus_number, connector in connector_by_bus.items():
+        result = try_bus(bus_number)
+        if not result:
             continue
-        if permission_blocked:
-            warning = "DDC/CI needs I2C access — add this user to the i2c group"
-        else:
-            warning = "no DDC/CI on this connection (enable it in the monitor OSD if it has one)"
-        displays.append(_uncontrolled(connector, warning))
+        claimed_buses.add(bus_number)
+        displays.append(
+            _ddc_display(connector, bus_number, result["client"], result["probed"])
+        )
+        attached.add(connector.sys_name)
 
-    # DDC monitors that never matched a DRM connector still count.
+    # Unmapped buses stay orphan displays. They are never borrowed to fill
+    # a connector whose own bus failed or was not published by the kernel.
     for bus in display_buses(i2c_class_root):
-        if bus.number in claimed_buses:
+        if bus.number in connector_by_bus or bus.number in claimed_buses:
             continue
         result = try_bus(bus.number)
         if not result:
@@ -327,4 +321,34 @@ def discover(
             _ddc_display(None, bus.number, result["client"], result["probed"])
         )
 
+    for connector in externals:
+        if connector.sys_name in attached:
+            continue
+        if permission_blocked:
+            warning = "DDC/CI needs I2C access — add this user to the i2c group"
+        else:
+            warning = "no DDC/CI on this connection (enable it in the monitor OSD if it has one)"
+        displays.append(_uncontrolled(connector, warning))
+
+    assign_unique_identities(displays)
     return displays
+
+
+def assign_unique_identities(displays: list[Display]) -> None:
+    """Suffix only identities that would otherwise control two endpoints."""
+    grouped: dict[str, list[Display]] = {}
+    for display in displays:
+        grouped.setdefault(display.identity, []).append(display)
+    for identity, group in grouped.items():
+        if len(group) < 2:
+            continue
+        used: set[str] = set()
+        for display in group:
+            suffix = display.connector_sys_name or (
+                f"i2c-{display.bus_number}" if display.bus_number is not None else "unknown"
+            )
+            candidate = f"{identity}@{suffix}"
+            if candidate in used:
+                candidate = f"{candidate}#{display.bus_number}"
+            used.add(candidate)
+            display.identity = candidate

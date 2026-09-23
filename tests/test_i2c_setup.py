@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import pwd
+import stat
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -7,9 +10,11 @@ from tempfile import TemporaryDirectory
 from monitorcontrol.i2c_setup import (
     UDEV_RULE,
     LinuxRunner,
+    SetupError,
     privileged_argv,
     privileged_setup,
     pkexec_grant,
+    validate_username,
 )
 
 
@@ -48,7 +53,7 @@ class PrivilegedSetupTests(unittest.TestCase):
             bus.write_text("")
             runner = FakeRunner()
             privileged_setup(
-                "hisao",
+                pwd.getpwuid(os.getuid()).pw_name,
                 udev_path=udev,
                 modules_path=modules,
                 devices=[bus],
@@ -58,7 +63,7 @@ class PrivilegedSetupTests(unittest.TestCase):
             self.assertEqual(UDEV_RULE, udev.read_text())
             self.assertEqual(modules.read_text(), "i2c-dev\n")
             self.assertEqual(runner.groups, ["i2c"])
-            self.assertEqual(runner.memberships, [("hisao", "i2c")])
+            self.assertEqual(runner.memberships, [(pwd.getpwuid(os.getuid()).pw_name, "i2c")])
             self.assertEqual(runner.modules, ["i2c-dev"])
             self.assertEqual(runner.reloaded, 1)
             self.assertEqual(runner.grants, [(str(bus), "hisao", "i2c")])
@@ -66,6 +71,10 @@ class PrivilegedSetupTests(unittest.TestCase):
     def test_refuses_root_user(self) -> None:
         with self.assertRaises(ValueError):
             privileged_setup("root", runner=FakeRunner())
+        with self.assertRaises(ValueError):
+            validate_username("-rf")
+        with self.assertRaises(ValueError):
+            validate_username("monitorcontrol-missing-user")
 
     def test_pkexec_argv_and_failure(self) -> None:
         argv = privileged_argv("hisao", executable="/opt/monitorcontrol")
@@ -109,9 +118,9 @@ class LinuxRunnerSmoke(unittest.TestCase):
             node = Path(raw) / "i2c-1"
             node.write_bytes(b"")
             node.chmod(0o600)
-            LinuxRunner().grant_now(node, "nobody", "root")
-            # chmod 666 fallback or 660 — either is readable attempt
-            self.assertTrue(node.exists())
+            with self.assertRaises(SetupError):
+                LinuxRunner().grant_now(node, "nobody", "root")
+            self.assertNotEqual(stat.S_IMODE(node.stat().st_mode), 0o666)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from gi.repository import Adw, Gtk  # noqa: E402
 
 from monitorcontrol.controller import Controller
 from monitorcontrol.display import Display
-from monitorcontrol.permissions import SETUP_COMMANDS, permission_message
+from monitorcontrol.permissions import permission_message
 from monitorcontrol.vcp import FEATURE_LABELS, Feature
 
 FEATURE_ICONS = {
@@ -32,6 +32,7 @@ class ControlWindow(Adw.ApplicationWindow):
         self.controller = controller
         self.on_settings = None
         self.on_setup = None
+        self.on_sync_changed = None
         self._scales: dict[tuple[str, Feature], Gtk.Scale] = {}
         self._percent_labels: dict[tuple[str, Feature], Gtk.Label] = {}
         self._updating = False
@@ -180,7 +181,10 @@ class ControlWindow(Adw.ApplicationWindow):
             self._updating = False
 
     def _on_sync(self, row: Adw.SwitchRow, _pspec: object) -> None:
-        self.controller.sync = bool(row.get_active())
+        enabled = bool(row.get_active())
+        self.controller.sync = enabled
+        if self.on_sync_changed is not None:
+            self.on_sync_changed(enabled)
 
     def _on_settings(self, _button: Gtk.Button) -> None:
         if self.on_settings is not None:
@@ -193,10 +197,3 @@ class ControlWindow(Adw.ApplicationWindow):
     def _on_banner(self, _banner: Adw.Banner) -> None:
         if self.on_setup is not None:
             self.on_setup()
-            return
-        display = self.get_display()
-        if display is None:
-            return
-        clipboard = display.get_clipboard()
-        clipboard.set(SETUP_COMMANDS.strip() + "\n")
-        self._banner.set_title("Setup commands copied — run them in a terminal, then log out.")

@@ -13,10 +13,11 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from monitorcontrol import APP_ID, APP_NAME
 from monitorcontrol.assetlib import package_data
-from monitorcontrol.bootstrap import bootstrap, running_on_gnome
+from monitorcontrol.backlight import is_internal_connector
+from monitorcontrol.bootstrap import SetupChoice, bootstrap, repair, running_on_gnome
 from monitorcontrol.config import Config, load as load_config
 from monitorcontrol.controller import Controller
-from monitorcontrol.dbus import export_session, own_bus_name
+from monitorcontrol.dbus import changes_payload, export_session, own_bus_name
 from monitorcontrol.gnome_backlight import NativeBrightnessFollower, apply_native_percent, attach_mutter
 from monitorcontrol.gnome_extension import enable as enable_extension
 from monitorcontrol.i2c_setup import pkexec_grant
@@ -56,6 +57,7 @@ class Application(Adw.Application):
         self.osd: Osd | None = None
         self._settings_dialog = None
         self._bootstrapping = False
+        self._emit_changed = None
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
@@ -64,8 +66,20 @@ class Application(Adw.Application):
         self.controller = Controller(step=self.config.step, sync=self.config.sync)
         self.controller.refresh()
         self.service = MonitorService(self.controller)
+
+        def publish(changes) -> None:
+            if not changes or self._emit_changed is None:
+                return
+            try:
+                self._emit_changed(changes_payload(changes))
+            except Exception:
+                pass
+
+        self.controller.subscribe(publish)
+        self._emit_changed = None
         try:
-            export_session(self.service)
+            _registration, emit_changed = export_session(self.service)
+            self._emit_changed = emit_changed
             own_bus_name()
         except Exception:
             pass
@@ -81,7 +95,9 @@ class Application(Adw.Application):
         self._ensure_window()
         if self._show_window and self.win is not None:
             self.win.present()
-            if not self.config.setup_complete and not self._bootstrapping:
+            if self.config.setup_complete and not self._bootstrapping:
+                repair(self._settings_actions(), on_gnome=running_on_gnome())
+            elif not self.config.setup_complete and not self._bootstrapping:
                 self._prompt_first_run()
         self._show_window = True
 
@@ -91,7 +107,10 @@ class Application(Adw.Application):
         assert self.controller is not None
         self.win = ControlWindow(self, self.controller)
         self.win.on_settings = self._open_settings
-        self.win.on_setup = lambda: self._run_bootstrap(grant_i2c=True)
+        self.win.on_setup = lambda: self._run_bootstrap(
+            SetupChoice(proceed=True, autostart=False, shortcuts=False, extension=False)
+        )
+        self.win.on_sync_changed = self._persist_sync
         self.osd = Osd(self)
         self.controller.subscribe(self.osd.show_changes)
 
@@ -107,6 +126,7 @@ class Application(Adw.Application):
             autostart_dir=AUTOSTART_DIR,
             extension_root=EXT_ROOT,
             shortcut_store=gnome_store(),
+            on_applied=self._apply_config,
         )
 
     def _prompt_first_run(self) -> None:
@@ -114,13 +134,37 @@ class Application(Adw.Application):
 
         self._bootstrapping = True
 
-        def chosen(do_admin: bool) -> None:
-            self._run_bootstrap(grant_i2c=do_admin)
+        def chosen(choice: SetupChoice) -> None:
+            self._run_bootstrap(choice)
             self._bootstrapping = False
 
-        prompt_setup(self.win, chosen)
+        prompt_setup(
+            self.win,
+            chosen,
+            on_gnome=running_on_gnome(),
+            needs_i2c=self._needs_i2c(),
+        )
 
-    def _run_bootstrap(self, *, grant_i2c: bool) -> None:
+    def _needs_i2c(self) -> bool:
+        if self.controller is None:
+            return False
+        return any(
+            not is_internal_connector(display.connector_type)
+            for display in self.controller.displays
+        )
+
+    def _apply_config(self, config: Config) -> None:
+        self.config = config
+        if self.controller is not None:
+            self.controller.step = config.step
+            self.controller.sync = config.sync
+
+    def _persist_sync(self, enabled: bool) -> None:
+        if self.config.sync == enabled:
+            return
+        self._settings_actions().set_sync(enabled)
+
+    def _run_bootstrap(self, choice: SetupChoice) -> None:
         actions = self._settings_actions()
         user = current_username()
 
@@ -131,12 +175,15 @@ class Application(Adw.Application):
             exe = str(installed) if installed.exists() else None
             return pkexec_grant(user, executable=exe)
 
+        packaged = Path("/usr/bin/monitorcontrol")
         result = bootstrap(
             actions,
-            grant_i2c=grant if grant_i2c else None,
-            install_binary=lambda: str(install_user_binary()),
+            grant_i2c=grant if choice.proceed else None,
+            install_binary=None if packaged.is_file() else (lambda: str(install_user_binary())),
             on_gnome=running_on_gnome(),
             enable_extension=enable_extension,
+            needs_i2c=self._needs_i2c(),
+            choice=choice,
         )
         self.config = actions.config
         if self.controller is not None:
