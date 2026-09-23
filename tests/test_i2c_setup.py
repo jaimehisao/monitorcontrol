@@ -52,8 +52,9 @@ class PrivilegedSetupTests(unittest.TestCase):
             bus.parent.mkdir()
             bus.write_text("")
             runner = FakeRunner()
+            username = pwd.getpwuid(os.getuid()).pw_name
             privileged_setup(
-                pwd.getpwuid(os.getuid()).pw_name,
+                username,
                 udev_path=udev,
                 modules_path=modules,
                 devices=[bus],
@@ -63,10 +64,10 @@ class PrivilegedSetupTests(unittest.TestCase):
             self.assertEqual(UDEV_RULE, udev.read_text())
             self.assertEqual(modules.read_text(), "i2c-dev\n")
             self.assertEqual(runner.groups, ["i2c"])
-            self.assertEqual(runner.memberships, [(pwd.getpwuid(os.getuid()).pw_name, "i2c")])
+            self.assertEqual(runner.memberships, [(username, "i2c")])
             self.assertEqual(runner.modules, ["i2c-dev"])
             self.assertEqual(runner.reloaded, 1)
-            self.assertEqual(runner.grants, [(str(bus), "hisao", "i2c")])
+            self.assertEqual(runner.grants, [(str(bus), username, "i2c")])
 
     def test_refuses_root_user(self) -> None:
         with self.assertRaises(ValueError):
