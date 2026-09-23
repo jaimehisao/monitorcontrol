@@ -9,6 +9,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gtk  # noqa: E402
 
+from monitorcontrol.gnome_extension import is_installed
 from monitorcontrol.settings_actions import SettingsActions
 
 
@@ -78,7 +79,9 @@ class SettingsDialog(Adw.PreferencesDialog):
             title="Quick Settings brightness slider",
             subtitle="monitorcontrol@monitorcontrol.dev",
         )
-        self._extension.set_active(False)
+        self._extension.set_active(
+            config.extension or is_installed(actions.extension_root)
+        )
         self._extension.connect("notify::active", self._on_extension)
         qs.add(self._extension)
         gnome.add(qs)

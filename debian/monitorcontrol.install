@@ -1,5 +1,6 @@
 packaging/shared/90-monitorcontrol-i2c.rules lib/udev/rules.d/
 packaging/shared/i2c-dev.conf usr/lib/modules-load.d/
+packaging/shared/dev.monitorcontrol.MonitorControl.policy usr/share/polkit-1/actions/
 src/monitorcontrol/data/dev.monitorcontrol.MonitorControl.desktop usr/share/applications/
 src/monitorcontrol/data/dev.monitorcontrol.MonitorControl.svg usr/share/icons/hicolor/scalable/apps/
 src/monitorcontrol/data/gnome-extension/extension.js usr/share/gnome-shell/extensions/monitorcontrol@monitorcontrol.dev/

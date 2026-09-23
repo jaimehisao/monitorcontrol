@@ -59,7 +59,22 @@ def dispatch(service: MonitorService, method: str, args: tuple[Any, ...]) -> str
     raise ValueError(f"unknown method {method}")
 
 
-def export_session(service: MonitorService, connection=None) -> int:
+def changes_payload(changes) -> str:
+    from monitorcontrol.service import NAME_BY_FEATURE
+
+    rows = [
+        {
+            "id": change.display.identity,
+            "name": change.display.name,
+            "feature": NAME_BY_FEATURE.get(change.feature, change.feature.name.lower()),
+            "percent": change.state.percent,
+        }
+        for change in changes
+    ]
+    return json.dumps(rows)
+
+
+def export_session(service: MonitorService, connection=None) -> tuple[int, object]:
     """Register the object on a D-Bus connection. Returns the registration id."""
     from gi.repository import Gio, GLib
 
@@ -75,7 +90,18 @@ def export_session(service: MonitorService, connection=None) -> int:
         except Exception as exc:  # noqa: BLE001 - D-Bus must not crash the app
             invocation.return_dbus_error(f"{INTERFACE}.Error", str(exc))
 
-    return connection.register_object(OBJECT_PATH, iface, on_method, None, None)
+    registration = connection.register_object(OBJECT_PATH, iface, on_method, None, None)
+
+    def emit_changed(payload: str) -> None:
+        connection.emit_signal(
+            None,
+            OBJECT_PATH,
+            INTERFACE,
+            "Changed",
+            GLib.Variant("(s)", (payload,)),
+        )
+
+    return registration, emit_changed
 
 
 def own_bus_name(bus_name: str = BUS_NAME) -> int:

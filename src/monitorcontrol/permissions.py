@@ -7,13 +7,17 @@ until the user is in the `i2c` group. This is the same for every vendor.
 from __future__ import annotations
 
 from monitorcontrol.i2c import permission_status
+from monitorcontrol.i2c_setup import UDEV_RULE, UDEV_RULE_NAME
 
-SETUP_COMMANDS = """sudo groupadd -f i2c
-sudo usermod -aG i2c "$USER"
-echo 'KERNEL=="i2c-[0-9]*", GROUP="i2c", MODE="0660"' | sudo tee /etc/udev/rules.d/90-monitorcontrol-i2c.rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-"""
+SETUP_COMMANDS = (
+    "sudo groupadd -f i2c\n"
+    'sudo usermod -aG i2c "$USER"\n'
+    f"sudo tee /etc/udev/rules.d/{UDEV_RULE_NAME} >/dev/null <<'EOF'\n"
+    f"{UDEV_RULE}"
+    "EOF\n"
+    "sudo udevadm control --reload-rules\n"
+    "sudo udevadm trigger\n"
+)
 
 
 def i2c_ready() -> bool:

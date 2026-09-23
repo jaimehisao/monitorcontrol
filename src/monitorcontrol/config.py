@@ -16,6 +16,7 @@ class Config:
     autostart: bool = False
     shortcuts: bool = False
     volume_keys: bool = False
+    extension: bool = False
     setup_complete: bool = False
 
     def clamp(self) -> Config:
@@ -26,6 +27,7 @@ class Config:
             autostart=bool(self.autostart),
             shortcuts=bool(self.shortcuts),
             volume_keys=bool(self.volume_keys),
+            extension=bool(self.extension),
             setup_complete=bool(self.setup_complete),
         )
 

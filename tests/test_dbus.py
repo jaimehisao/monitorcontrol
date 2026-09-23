@@ -4,7 +4,8 @@ import json
 import unittest
 
 from monitorcontrol.controller import Controller
-from monitorcontrol.dbus import JsonClient, dispatch
+from monitorcontrol.controller import Change
+from monitorcontrol.dbus import JsonClient, changes_payload, dispatch
 from monitorcontrol.display import BackendKind, Display, FeatureState
 from monitorcontrol.service import MonitorService
 from monitorcontrol.vcp import Feature
@@ -38,6 +39,17 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(bumped[0]["percent"], 20)
         rows = self.client.refresh()
         self.assertEqual(len(rows), 1)
+
+    def test_changed_payload_matches_extension_contract(self) -> None:
+        display = self.ctrl.displays[0]
+        payload = json.loads(
+            changes_payload(
+                [Change(display, Feature.BRIGHTNESS, display.features[Feature.BRIGHTNESS])]
+            )
+        )
+        self.assertEqual(payload[0]["id"], display.identity)
+        self.assertEqual(payload[0]["feature"], "brightness")
+        self.assertIn("percent", payload[0])
 
     def test_unknown_method(self) -> None:
         with self.assertRaises(ValueError):

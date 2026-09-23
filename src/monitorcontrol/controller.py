@@ -54,6 +54,8 @@ class Controller:
         self.displays: list[Display] = []
         self._pending: dict[tuple[str, Feature], int] = {}
         self._flush_handle: object | None = None
+        self.last_write_error: str | None = None
+        self._hardware: dict[tuple[str, Feature], FeatureState] = {}
         self._lock = threading.Lock()
         self._listeners: list[Callable[[list[Change]], None]] = []
 
@@ -68,10 +70,11 @@ class Controller:
 
     def refresh(self) -> list[Display]:
         with self._lock:
+            self._flush_locked()
             for display in self.displays:
                 display.close()
             self.displays = self._discover()
-            self._pending.clear()
+            self._remember_hardware()
             return list(self.displays)
 
     def close(self) -> None:
@@ -166,6 +169,13 @@ class Controller:
         with self._lock:
             self._flush_locked()
 
+    def _remember_hardware(self) -> None:
+        self._hardware = {
+            (display.identity, feature): state
+            for display in self.displays
+            for feature, state in display.features.items()
+        }
+
     def _flush_locked(self) -> None:
         pending = self._pending
         self._pending = {}
@@ -175,4 +185,17 @@ class Controller:
             display = by_id.get(identity)
             if display is None:
                 continue
-            display.set_raw(feature, value)
+            try:
+                display.set_raw(feature, value)
+            except Exception as exc:
+                previous = getattr(self, "_hardware", {}).get((identity, feature))
+                if previous is not None and feature in display.features:
+                    display.features[feature] = previous
+                message = f"Could not update {display.name}: {exc}"
+                display.warning = message
+                self.last_write_error = message
+                continue
+            self.last_write_error = None
+            if not hasattr(self, "_hardware"):
+                self._hardware = {}
+            self._hardware[(identity, feature)] = display.features[feature]

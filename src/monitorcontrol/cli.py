@@ -194,7 +194,7 @@ def _run_privileged_setup(username: str, out: TextIO, *, euid: int | None = None
 
     try:
         i2c_setup.privileged_setup(username)
-    except ValueError as exc:
+    except (ValueError, i2c_setup.SetupError) as exc:
         out.write(f"{exc}\n")
         return 1
     out.write(f"I2C access is ready for {username} in this session.\n")

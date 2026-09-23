@@ -20,6 +20,7 @@ class SettingsActions:
         extension_root: Path,
         shortcut_store: ShortcutStore | None = None,
         program: str | None = None,
+        on_applied=None,
     ) -> None:
         self.config = config
         self.config_path = config_path
@@ -27,9 +28,12 @@ class SettingsActions:
         self.extension_root = extension_root
         self.shortcut_store = shortcut_store or MemoryShortcutStore()
         self.program = program or cli_command()
+        self.on_applied = on_applied
 
     def persist(self) -> None:
         save(self.config, self.config_path)
+        if self.on_applied is not None:
+            self.on_applied(self.config)
 
     def set_step(self, step: int) -> None:
         self.config.step = step
@@ -71,7 +75,11 @@ class SettingsActions:
         self.persist()
 
     def set_extension(self, enabled: bool) -> Path | None:
+        self.config.extension = enabled
         if enabled:
-            return gnome_extension.install(self.extension_root)
+            installed = gnome_extension.install(self.extension_root)
+            self.persist()
+            return installed
         gnome_extension.uninstall(self.extension_root)
+        self.persist()
         return None

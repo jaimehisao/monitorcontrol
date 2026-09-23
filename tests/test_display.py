@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from monitorcontrol.ddc import DdcClient, DdcPermissionError
-from monitorcontrol.display import BackendKind, FeatureState, discover
+from monitorcontrol.display import BackendKind, Display, FeatureState, discover
 from monitorcontrol.vcp import Feature
 from tests.test_ddc import _reply
 from tests.test_detect import _fake_drm
@@ -173,6 +173,35 @@ class DisplayObjectTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             display.get(Feature.CONTRAST)
 
+    def test_duplicate_identities_gain_connector_suffix(self) -> None:
+        from monitorcontrol.display import assign_unique_identities
+
+        one = Display(
+            identity="DEL:U2720Q",
+            name="A",
+            connector_sys_name="card0-HDMI-A-1",
+            connector_type="HDMI-A",
+            kind=BackendKind.DDC,
+        )
+        two = Display(
+            identity="DEL:U2720Q",
+            name="B",
+            connector_sys_name="card0-HDMI-A-2",
+            connector_type="HDMI-A",
+            kind=BackendKind.DDC,
+        )
+        unique = Display(
+            identity="GSM:27GL850:BB",
+            name="C",
+            connector_sys_name="card0-DP-1",
+            connector_type="DP",
+            kind=BackendKind.DDC,
+        )
+        assign_unique_identities([two, one, unique])
+        self.assertEqual(one.identity, "DEL:U2720Q@card0-HDMI-A-1")
+        self.assertEqual(two.identity, "DEL:U2720Q@card0-HDMI-A-2")
+        self.assertEqual(unique.identity, "GSM:27GL850:BB")
+
     def test_open_linux_permission(self) -> None:
         from monitorcontrol.ddc import DdcError, DdcPermissionError
         from monitorcontrol.display import _open_linux
@@ -212,14 +241,51 @@ class IsolatedDiscoverTests(unittest.TestCase):
                     }
                 ),
             )
-            self.assertEqual(len(displays), 1)
-            panel = displays[0]
+            by_kind = {display.kind: display for display in displays}
+            self.assertEqual(set(by_kind), {BackendKind.NONE, BackendKind.DDC})
+            panel = by_kind[BackendKind.NONE]
             self.assertEqual(panel.name, "P27h-20")
-            self.assertEqual(panel.kind, BackendKind.DDC)
-            self.assertEqual(panel.bus_number, 6)
-            self.assertEqual(panel.features[Feature.BRIGHTNESS].percent, 100)
-            self.assertEqual(panel.features[Feature.CONTRAST].percent, 75)
-            self.assertEqual(panel.features[Feature.AUDIO_SPEAKER_VOLUME].percent, 50)
+            self.assertIsNone(panel.bus_number)
+            orphan = by_kind[BackendKind.DDC]
+            self.assertEqual(orphan.bus_number, 6)
+            self.assertEqual(orphan.features[Feature.BRIGHTNESS].percent, 100)
+            self.assertEqual(orphan.features[Feature.CONTRAST].percent, 75)
+            self.assertEqual(orphan.features[Feature.AUDIO_SPEAKER_VOLUME].percent, 50)
+
+    def test_failed_bus_is_not_replaced_by_another_connector(self) -> None:
+        hdmi = self.drm / "card1-HDMI-A-1" if hasattr(self, "drm") else None
+        del hdmi
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            drm = root / "drm"
+            first = drm / "card0-HDMI-A-1"
+            second = drm / "card0-HDMI-A-2"
+            _write(first / "status", "connected\n")
+            _write(first / "enabled", "enabled\n")
+            _write(second / "status", "connected\n")
+            _write(second / "enabled", "enabled\n")
+            _write(root / "i2c" / "i2c-1" / "name", "NVIDIA i2c adapter 1\n")
+            _write(root / "i2c" / "i2c-2" / "name", "NVIDIA i2c adapter 2\n")
+            (first / "ddc").symlink_to(root / "i2c" / "i2c-1")
+            (second / "ddc").symlink_to(root / "i2c" / "i2c-2")
+            opened: list[int] = []
+
+            def opener(number: int):
+                opened.append(number)
+                if number == 1:
+                    return None
+                return _opener({2: {0x10: (20, 100)}})(number)
+
+            displays = discover(
+                drm_root=drm,
+                backlight_root=root / "bl",
+                i2c_class_root=root / "i2c",
+                opener=opener,
+            )
+            by_connector = {display.connector_sys_name: display for display in displays}
+            self.assertEqual(by_connector["card0-HDMI-A-1"].kind, BackendKind.NONE)
+            self.assertEqual(by_connector["card0-HDMI-A-2"].bus_number, 2)
+            self.assertEqual(opened.count(2), 1)
 
     def test_ddc_without_drm_still_shows_up(self) -> None:
         with TemporaryDirectory() as raw:

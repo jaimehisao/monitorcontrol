@@ -51,6 +51,8 @@ install -D -m 644 packaging/shared/90-monitorcontrol-i2c.rules \
     %{buildroot}%{_udevrulesdir}/90-monitorcontrol-i2c.rules
 install -D -m 644 packaging/shared/i2c-dev.conf \
     %{buildroot}%{_prefix}/lib/modules-load.d/i2c-dev.conf
+install -D -m 644 packaging/shared/dev.monitorcontrol.MonitorControl.policy \
+    %{buildroot}%{_datadir}/polkit-1/actions/dev.monitorcontrol.MonitorControl.policy
 install -d %{buildroot}%{_datadir}/gnome-shell/extensions/monitorcontrol@monitorcontrol.dev
 install -m 644 src/monitorcontrol/data/gnome-extension/extension.js \
     src/monitorcontrol/data/gnome-extension/metadata.json \
@@ -76,6 +78,7 @@ getent group i2c >/dev/null || groupadd -r i2c
 %{_datadir}/icons/hicolor/scalable/apps/dev.monitorcontrol.MonitorControl.svg
 %{_udevrulesdir}/90-monitorcontrol-i2c.rules
 %{_prefix}/lib/modules-load.d/i2c-dev.conf
+%{_datadir}/polkit-1/actions/dev.monitorcontrol.MonitorControl.policy
 %{_datadir}/gnome-shell/extensions/monitorcontrol@monitorcontrol.dev/
 
 %changelog

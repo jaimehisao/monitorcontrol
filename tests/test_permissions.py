@@ -11,6 +11,8 @@ class PermissionTests(unittest.TestCase):
         self.assertIn("udev", SETUP_COMMANDS)
         self.assertNotIn("nvidia", SETUP_COMMANDS.lower())
         self.assertNotIn("lenovo", SETUP_COMMANDS.lower())
+        self.assertNotIn("0666", SETUP_COMMANDS)
+        self.assertIn("uaccess", SETUP_COMMANDS)
 
     def test_live_message_matches_access(self) -> None:
         from monitorcontrol.i2c import permission_status
