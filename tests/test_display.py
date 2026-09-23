@@ -186,6 +186,41 @@ class DisplayObjectTests(unittest.TestCase):
 
 
 class IsolatedDiscoverTests(unittest.TestCase):
+    def test_nvidia_without_ddc_symlink_skips_empty_buses(self) -> None:
+        from tests.test_detect import make_edid
+
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            drm = root / "drm"
+            hdmi = drm / "card1-HDMI-A-1"
+            _write(hdmi / "status", "connected\n")
+            _write(hdmi / "enabled", "enabled\n")
+            _write(hdmi / "edid", make_edid(manufacturer="LEN", name="P27h-20", serial="V9091HR5"))
+            i2c = root / "i2c"
+            _write(i2c / "i2c-0" / "name", "Synopsys DesignWare I2C adapter\n")
+            _write(i2c / "i2c-3" / "name", "NVIDIA i2c adapter 1 at 1:00.0\n")
+            _write(i2c / "i2c-6" / "name", "NVIDIA i2c adapter 6 at 1:00.0\n")
+            displays = discover(
+                drm_root=drm,
+                backlight_root=root / "bl",
+                i2c_class_root=i2c,
+                opener=_opener(
+                    {
+                        0: {},
+                        3: {},
+                        6: {0x10: (100, 100), 0x12: (75, 100), 0x62: (50, 100)},
+                    }
+                ),
+            )
+            self.assertEqual(len(displays), 1)
+            panel = displays[0]
+            self.assertEqual(panel.name, "P27h-20")
+            self.assertEqual(panel.kind, BackendKind.DDC)
+            self.assertEqual(panel.bus_number, 6)
+            self.assertEqual(panel.features[Feature.BRIGHTNESS].percent, 100)
+            self.assertEqual(panel.features[Feature.CONTRAST].percent, 75)
+            self.assertEqual(panel.features[Feature.AUDIO_SPEAKER_VOLUME].percent, 50)
+
     def test_ddc_without_drm_still_shows_up(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)
