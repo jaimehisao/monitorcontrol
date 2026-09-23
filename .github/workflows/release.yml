@@ -5,97 +5,415 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
-permissions:
-  contents: write
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build and publish
-    runs-on: ubuntu-latest
+  validate:
+    name: Validate release identity
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Validate versions and distribution name
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          version="$(python3 scripts/release.py check)"
+          version="${version##*: }"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$EVENT_NAME" == push ]]; then
+            python3 scripts/release.py check --tag "$GITHUB_REF_NAME"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Fetch protected main
+        if: github.event_name == 'push'
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+      - name: Validate annotated signed tag and main ancestry
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 packaging/release/validate_tag.py "$GITHUB_REF_NAME"
 
-      - name: Install GTK, PyGObject, Xvfb
+  test:
+    name: Unit and release helper tests
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install test dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            python3-gi \
-            python3-gi-cairo \
-            python3-pip \
-            python3-venv \
-            gir1.2-gtk-4.0 \
-            gir1.2-adw-1 \
-            xvfb
-
-      - name: Virtualenv with system GI modules
-        run: |
-          python3 -m venv --system-site-packages .venv
-          .venv/bin/pip install --upgrade pip
-          .venv/bin/pip install coverage build
-
-      - name: Tests
+            python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 xvfb
+      - name: Run tests
         env:
           PYTHONPATH: src
-        run: |
-          xvfb-run -a .venv/bin/coverage run --source=src/monitorcontrol -m unittest discover -s tests
-          .venv/bin/coverage report
+        run: xvfb-run -a python3 -m unittest discover -s tests -v
 
-      - name: Check tag matches package version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
-          tag="${GITHUB_REF_NAME#v}"
-          if [ "$tag" != "$version" ]; then
-            echo "Tag v$tag does not match pyproject version $version"
-            exit 1
-          fi
-
-      - name: Build wheel, sdist, and linux binary
-        run: |
-          source .venv/bin/activate
-          ./scripts/build-release.sh
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+  source:
+    name: Python and canonical source
+    needs: [validate, test]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          name: monitorcontrol-dist
-          path: dist/*
+          fetch-depth: 0
+      - run: python3 -m pip install --user build
+      - run: PYTHON=python3 ./scripts/build-release.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-python
+          path: |
+            dist/monitorcontrol_linux-*
+            dist/monitorcontrol-*-source.tar.gz
+          if-no-files-found: error
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  rpm:
+    name: Fedora ${{ matrix.fedora }} RPM/SRPM
+    needs: [validate, source]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora: ["43", "44"]
+    container:
+      image: fedora:${{ matrix.fedora }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-python
+          path: dist
+      - name: Build native packages
         run: |
-          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
-          cat > /tmp/release-notes.md <<EOF
-          ## Downloads
+          dnf -y install rpm-build python3-devel python3-setuptools \
+            python3-gobject gtk4 libadwaita python3-wheel python3-build \
+            pyproject-rpm-macros systemd-rpm-macros
+          archive="$(./scripts/select-package.sh dist 'monitorcontrol-*-source.tar.gz')"
+          PACKAGE_OUTPUT_DIR="out" ./packaging/rpm/build.sh "$archive"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-fedora-${{ matrix.fedora }}
+          path: out/
+          if-no-files-found: error
 
-          | File | What it is |
-          | --- | --- |
-          | \`monitorcontrol-${version}-linux\` | Single-file executable (zipapp) |
-          | \`monitorcontrol-${version}-py3-none-any.whl\` | pip wheel |
-          | \`monitorcontrol-${version}.tar.gz\` | Source tarball |
-          | \`SHA256SUMS\` | Checksums |
+  debian:
+    name: Debian 13 binary/source
+    needs: [validate, source]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    container:
+      image: debian:13
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-python
+          path: dist
+      - name: Build Debian packages
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential dpkg-dev
+          DEBIAN_FRONTEND=noninteractive apt-get build-dep -y .
+          archive="$(./scripts/select-package.sh dist 'monitorcontrol-*-source.tar.gz')"
+          PACKAGE_OUTPUT_DIR=out ./packaging/debian/build.sh "$archive"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-debian-13
+          path: out/
+          if-no-files-found: error
 
-          The linux binary still needs distro GTK 4, libadwaita, and PyGObject:
+  noble:
+    name: Ubuntu 24.04 noble source
+    needs: [validate, source]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    container:
+      image: ubuntu:24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-python
+          path: dist
+      - name: Build unsigned noble source package
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential dpkg-dev python3
+          DEBIAN_FRONTEND=noninteractive apt-get build-dep -y .
+          archive="$(./scripts/select-package.sh dist 'monitorcontrol-*-source.tar.gz')"
+          python3 packaging/release/prepare_ppa.py "$archive" out
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-noble
+          path: out/
+          if-no-files-found: error
 
-          \`\`\`bash
-          # Debian / Ubuntu
-          sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1
-          chmod +x monitorcontrol-${version}-linux
-          ./monitorcontrol-${version}-linux list
-          \`\`\`
+  sbom:
+    name: SPDX SBOM
+    needs: [validate, source]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: anchore/sbom-action@f8bdd1d8ac5e901a77a92f111440fdb1b593736b # v0.20.6
+        with:
+          path: .
+          format: spdx-json
+          output-file: monitorcontrol-${{ needs.validate.outputs.version }}.spdx.json
+          upload-artifact: false
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-sbom
+          path: monitorcontrol-*.spdx.json
+          if-no-files-found: error
 
-          \`\`\`bash
-          pip install monitorcontrol-${version}-py3-none-any.whl
-          \`\`\`
+  inventory:
+    name: Validate complete build inventory
+    needs: [validate, source, rpm, debian, noble, sbom]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-python
+          path: inventory/python
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-fedora-43
+          path: inventory/fedora-43
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-fedora-44
+          path: inventory/fedora-44
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-debian-13
+          path: inventory/debian-13
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-noble
+          path: inventory/noble
+      - name: Validate exact package inventory
+        run: |
+          python3 packaging/release/validate_inventory.py \
+            inventory "${{ needs.validate.outputs.version }}" --stage build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-build
+          path: inventory/
+          if-no-files-found: error
+
+  dry-run:
+    name: Dispatch validation complete
+    if: github.event_name == 'workflow_dispatch'
+    needs: [validate, inventory]
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - run: echo "Build and validation completed; workflow_dispatch never publishes."
+
+  publish:
+    name: Draft and publish protected release
+    if: github.event_name == 'push'
+    needs: [validate, inventory]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-build
+          path: inventory
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-sbom
+          path: sbom
+      - name: Install publication clients
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            copr-cli devscripts dput gnupg
+      - name: Validate protected publication configuration
+        env:
+          COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
+          COPR_PROJECT: ${{ vars.COPR_PROJECT }}
+          PPA_GPG_PRIVATE_KEY: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+          PPA_GPG_PASSPHRASE: ${{ secrets.PPA_GPG_PASSPHRASE }}
+          PPA_GPG_FINGERPRINT: ${{ secrets.PPA_GPG_FINGERPRINT }}
+          PPA_TARGET: ${{ vars.PPA_TARGET }}
+        run: |
+          : "${COPR_CONFIG:?release environment secret COPR_CONFIG is required}"
+          : "${COPR_PROJECT:?release environment variable COPR_PROJECT is required}"
+          : "${PPA_GPG_PRIVATE_KEY:?release environment secret PPA_GPG_PRIVATE_KEY is required}"
+          : "${PPA_GPG_PASSPHRASE:?release environment secret PPA_GPG_PASSPHRASE is required}"
+          : "${PPA_GPG_FINGERPRINT:?release environment secret PPA_GPG_FINGERPRINT is required}"
+          : "${PPA_TARGET:?release environment variable PPA_TARGET is required}"
+      - name: Create or retain draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            test "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" = true
+          else
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+              --title "MonitorControl $GITHUB_REF_NAME" --generate-notes
+          fi
+      - name: Sign noble source package
+        env:
+          PPA_GPG_PRIVATE_KEY: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+          PPA_GPG_PASSPHRASE: ${{ secrets.PPA_GPG_PASSPHRASE }}
+          PPA_GPG_FINGERPRINT: ${{ secrets.PPA_GPG_FINGERPRINT }}
+        run: |
+          umask 077
+          export GNUPGHOME
+          GNUPGHOME="$(mktemp -d)"
+          trap 'rm -rf "$GNUPGHOME" /tmp/ppa-private-key.asc /tmp/ppa-passphrase /tmp/ppa-gpg' EXIT
+          printf '%s' "$PPA_GPG_PRIVATE_KEY" > /tmp/ppa-private-key.asc
+          printf '%s' "$PPA_GPG_PASSPHRASE" > /tmp/ppa-passphrase
+          gpg --batch --pinentry-mode loopback \
+            --passphrase-file /tmp/ppa-passphrase --import /tmp/ppa-private-key.asc
+          cat > /tmp/ppa-gpg <<'EOF'
+          #!/bin/sh
+          exec gpg --batch --yes --pinentry-mode loopback \
+            --passphrase-file /tmp/ppa-passphrase "$@"
           EOF
-          gh release create "${GITHUB_REF_NAME}" \
-            dist/monitorcontrol \
-            "dist/monitorcontrol-${version}-linux" \
-            "dist/monitorcontrol-${version}-py3-none-any.whl" \
-            "dist/monitorcontrol-${version}.tar.gz" \
-            dist/SHA256SUMS \
-            --title "MonitorControl ${GITHUB_REF_NAME}" \
-            --notes-file /tmp/release-notes.md \
-            --generate-notes
+          chmod 700 /tmp/ppa-gpg
+          changes="$(./scripts/select-package.sh inventory/noble '*_source.changes')"
+          debsign -p/tmp/ppa-gpg -k"$PPA_GPG_FINGERPRINT" --re-sign "$changes"
+          gpg --batch --list-keys "$PPA_GPG_FINGERPRINT" >/dev/null
+      - name: Assemble release assets
+        run: |
+          mkdir release-assets
+          cp inventory/python/* release-assets/
+          cp inventory/fedora-43/{rpm,srpm}/* release-assets/
+          cp inventory/fedora-44/{rpm,srpm}/* release-assets/
+          cp inventory/debian-13/binary/*.deb release-assets/
+          cp inventory/noble/* release-assets/
+          cp sbom/* release-assets/
+      - name: Attest release assets
+        id: attest
+        uses: actions/attest-build-provenance@62fc1d596301d0ab9914e1fec14dc5c8d93f65cd # v3.2.0
+        with:
+          subject-path: release-assets/*
+      - name: Save provenance bundle and metadata
+        env:
+          ATTESTATION_ID: ${{ steps.attest.outputs.attestation-id }}
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE_PATH" release-assets/provenance.bundle.json
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path("release-assets/provenance.json").write_text(json.dumps({
+              "attestation_id": os.environ["ATTESTATION_ID"],
+              "attestation_url": os.environ["ATTESTATION_URL"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "ref": os.environ["GITHUB_REF"],
+              "sha": os.environ["GITHUB_SHA"],
+          }, indent=2) + "\n")
+          PY
+      - name: Generate checksums for every release asset
+        run: |
+          asset_list="$RUNNER_TEMP/release-asset-list"
+          checksums="$RUNNER_TEMP/release-sha256sums"
+          (
+            cd release-assets
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' \
+              | LC_ALL=C sort > "$asset_list"
+            xargs sha256sum < "$asset_list" > "$checksums"
+          )
+          mv "$checksums" release-assets/SHA256SUMS
+      - name: Validate and upload exact draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 packaging/release/validate_inventory.py release-assets \
+            "${{ needs.validate.outputs.version }}" --stage release
+          gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
+      - name: Publish Python distributions with Trusted Publishing
+        run: |
+          mkdir pypi-dist
+          cp inventory/python/monitorcontrol_linux-* pypi-dist/
+      - name: Upload Python distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          packages-dir: pypi-dist/
+          skip-existing: true
+      - name: Submit only SRPM to COPR
+        env:
+          COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
+          COPR_PROJECT: ${{ vars.COPR_PROJECT }}
+        run: |
+          umask 077
+          mkdir -p ~/.config
+          printf '%s' "$COPR_CONFIG" > ~/.config/copr
+          chmod 600 ~/.config/copr
+          srpm="$(./scripts/select-package.sh inventory/fedora-44/srpm '*.src.rpm')"
+          copr-cli build "$COPR_PROJECT" "$srpm"
+      - name: Upload signed source package to Launchpad
+        env:
+          PPA_TARGET: ${{ vars.PPA_TARGET }}
+        run: |
+          changes="$(./scripts/select-package.sh inventory/noble '*_source.changes')"
+          dput "$PPA_TARGET" "$changes"
+
+  finalize:
+    name: Verify public channels and publish draft
+    if: github.event_name == 'push'
+    needs: [validate, publish]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Verify PyPI, COPR, and Launchpad
+        env:
+          COPR_PROJECT: ${{ vars.COPR_PROJECT }}
+          PPA_TARGET: ${{ vars.PPA_TARGET }}
+        run: |
+          copr_owner="${COPR_PROJECT%%/*}"
+          copr_project="${COPR_PROJECT#*/}"
+          ppa="${PPA_TARGET#ppa:}"
+          ppa_owner="${ppa%%/*}"
+          ppa_archive="${ppa#*/}"
+          python3 packaging/release/verify_publications.py \
+            "${{ needs.validate.outputs.version }}" \
+            --copr-owner "$copr_owner" --copr-project "$copr_project" \
+            --ppa-owner "$ppa_owner" --ppa-archive "$ppa_archive"
+      - name: Publish GitHub Release as latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest
