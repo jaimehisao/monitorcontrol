@@ -15,6 +15,7 @@ jobs:
   validate:
     name: Validate release identity
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     outputs:
@@ -51,6 +52,7 @@ jobs:
     name: Unit and release helper tests
     needs: validate
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -69,6 +71,7 @@ jobs:
     name: Python and canonical source
     needs: [validate, test]
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -89,6 +92,7 @@ jobs:
     name: Fedora ${{ matrix.fedora }} RPM/SRPM
     needs: [validate, source]
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     permissions:
       contents: read
     strategy:
@@ -105,8 +109,9 @@ jobs:
           path: dist
       - name: Build native packages
         run: |
-          dnf -y install rpm-build python3-devel python3-setuptools \
-            python3-gobject gtk4 libadwaita python3-wheel python3-build \
+          dnf -y install --setopt=install_weak_deps=False \
+            rpm-build python3-devel python3-setuptools \
+            python3-gobject cairo-gobject gobject-introspection gtk4 libadwaita python3-wheel python3-build python3-pip \
             pyproject-rpm-macros systemd-rpm-macros
           archive="$(./scripts/select-package.sh dist 'monitorcontrol-*-source.tar.gz')"
           PACKAGE_OUTPUT_DIR="out" ./packaging/rpm/build.sh "$archive"
@@ -120,6 +125,7 @@ jobs:
     name: Debian 13 binary/source
     needs: [validate, source]
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     container:
@@ -148,6 +154,7 @@ jobs:
     name: Ubuntu 24.04 noble source
     needs: [validate, source]
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     container:
@@ -176,6 +183,7 @@ jobs:
     name: SPDX SBOM
     needs: [validate, source]
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -196,6 +204,7 @@ jobs:
     name: Validate complete build inventory
     needs: [validate, source, rpm, debian, noble, sbom]
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -235,6 +244,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: [validate, inventory]
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions: {}
     steps:
       - run: echo "Build and validation completed; workflow_dispatch never publishes."

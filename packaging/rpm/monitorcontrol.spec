@@ -11,12 +11,16 @@ BuildArch:      noarch
 BuildRequires:  python3-devel
 BuildRequires:  pyproject-rpm-macros
 BuildRequires:  python3-gobject
+BuildRequires:  cairo-gobject
+BuildRequires:  gobject-introspection
 BuildRequires:  gtk4
 BuildRequires:  libadwaita
 BuildRequires:  systemd-rpm-macros
 
 Requires:       python3-gobject
 Requires:       python3-cairo
+Requires:       cairo-gobject
+Requires:       gobject-introspection
 Requires:       gtk4
 Requires:       libadwaita
 Requires:       python3-gobject-base
