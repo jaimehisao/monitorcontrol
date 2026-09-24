@@ -267,6 +267,8 @@ def run(
             service, args.command, args.value, identity, args.step, out
         )
     finally:
+        if controller is not None and not own:
+            controller.flush()
         if own and controller is not None:
             controller.close()
 

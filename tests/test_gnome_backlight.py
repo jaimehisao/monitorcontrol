@@ -86,12 +86,25 @@ class ApplyNativeTests(unittest.TestCase):
             features={Feature.BRIGHTNESS: FeatureState(50, 100)},
             _set=lambda _f, value: writes.append(value),
         )
-        ctrl = Controller(discover_fn=lambda: [laptop, external])
+        queued: list = []
+
+        class Queue:
+            def call_later(self, _delay, fn):
+                queued.append(fn)
+                return fn
+
+            def cancel(self, handle):
+                if handle in queued:
+                    queued.remove(handle)
+
+        ctrl = Controller(discover_fn=lambda: [laptop, external], scheduler=Queue())
         ctrl.refresh()
         applied = apply_native_percent(ctrl, 20)
         self.assertEqual(applied, 1)
         self.assertEqual(laptop.features[Feature.BRIGHTNESS].percent, 20)
         self.assertEqual(external.features[Feature.BRIGHTNESS].percent, 20)
+        self.assertEqual(writes, [])
+        queued.pop()()
         self.assertEqual(writes, [20])
 
     def test_strip_and_attach(self) -> None:

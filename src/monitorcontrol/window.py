@@ -7,9 +7,9 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gtk  # noqa: E402
+from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
-from monitorcontrol.controller import Controller
+from monitorcontrol.controller import Change, Controller
 from monitorcontrol.display import Display
 from monitorcontrol.permissions import permission_message
 from monitorcontrol.vcp import FEATURE_LABELS, Feature
@@ -36,6 +36,7 @@ class ControlWindow(Adw.ApplicationWindow):
         self._scales: dict[tuple[str, Feature], Gtk.Scale] = {}
         self._percent_labels: dict[tuple[str, Feature], Gtk.Label] = {}
         self._updating = False
+        self.controller.subscribe_refresh(self._on_displays)
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -190,9 +191,32 @@ class ControlWindow(Adw.ApplicationWindow):
         if self.on_settings is not None:
             self.on_settings()
 
-    def _on_refresh(self, _button: Gtk.Button) -> None:
-        self.controller.refresh()
+    def apply_external(self, changes: list[Change]) -> None:
+        """Move sliders to match another surface without writing that value again."""
+        if self._updating:
+            return
+        self._updating = True
+        try:
+            for change in changes:
+                key = (change.display.identity, change.feature)
+                scale = self._scales.get(key)
+                label = self._percent_labels.get(key)
+                if scale is not None:
+                    scale.set_value(change.state.percent)
+                if label is not None:
+                    label.set_text(f"{change.state.percent}%")
+        finally:
+            self._updating = False
+
+    def _on_displays(self, _displays: list[Display]) -> None:
+        GLib.idle_add(self._rebuild_idle)
+
+    def _rebuild_idle(self) -> bool:
         self.rebuild()
+        return False
+
+    def _on_refresh(self, _button: Gtk.Button) -> None:
+        self.controller.refresh(block=False)
 
     def _on_banner(self, _banner: Adw.Banner) -> None:
         if self.on_setup is not None:
