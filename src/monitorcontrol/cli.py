@@ -263,9 +263,14 @@ def run(
         identity = _resolve_identity(service.list_displays(), args.display)
         if args.command == "list":
             return _print_list(service, out)
-        return _run_feature(
+        code = _run_feature(
             service, args.command, args.value, identity, args.step, out
         )
+        # One-shot CLI owns the hardware for this process. Push the coalesced
+        # value before returning; the session daemon coalesces on its own.
+        if controller is not None:
+            controller.flush()
+        return code
     finally:
         if own and controller is not None:
             controller.close()

@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from monitorcontrol.controller import Controller
-from monitorcontrol.controller import Change
+from monitorcontrol.controller import Change, Controller
 from monitorcontrol.dbus import JsonClient, changes_payload, dispatch
 from monitorcontrol.display import BackendKind, Display, FeatureState
 from monitorcontrol.service import MonitorService
@@ -29,6 +28,9 @@ class DispatchTests(unittest.TestCase):
         self.ctrl.refresh()
         self.service = MonitorService(self.ctrl)
         self.client = JsonClient(lambda method, args: dispatch(self.service, method, args))
+
+    def tearDown(self) -> None:
+        self.ctrl.close()
 
     def test_list_set_adjust_refresh(self) -> None:
         rows = self.client.list_displays()

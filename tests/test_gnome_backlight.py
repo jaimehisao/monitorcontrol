@@ -92,7 +92,10 @@ class ApplyNativeTests(unittest.TestCase):
         self.assertEqual(applied, 1)
         self.assertEqual(laptop.features[Feature.BRIGHTNESS].percent, 20)
         self.assertEqual(external.features[Feature.BRIGHTNESS].percent, 20)
+        self.assertEqual(writes, [])
+        ctrl.flush()
         self.assertEqual(writes, [20])
+        ctrl.close()
 
     def test_strip_and_attach(self) -> None:
         class Box:

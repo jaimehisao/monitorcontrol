@@ -26,13 +26,23 @@ def parse_feature(name: str) -> Feature:
         raise ValueError(f"unknown feature {name!r}") from exc
 
 
-def display_payload(display) -> dict[str, Any]:
-    features = {
-        NAME_BY_FEATURE[feature]: state.percent
-        for feature, state in display.features.items()
-        if feature in NAME_BY_FEATURE
-    }
-    return {
+def display_payload(display, controller: Controller | None = None) -> dict[str, Any]:
+    features: dict[str, int] = {}
+    confirmed: dict[str, int] = {}
+    errors: dict[str, str] = {}
+    for feature, state in display.features.items():
+        name = NAME_BY_FEATURE.get(feature)
+        if name is None:
+            continue
+        features[name] = state.percent
+        if controller is None:
+            confirmed[name] = state.percent
+            continue
+        confirmed[name] = controller.confirmed_percent(display.identity, feature)
+        error = controller.feature_error(display.identity, feature)
+        if error:
+            errors[name] = error
+    payload: dict[str, Any] = {
         "id": display.identity,
         "name": display.name,
         "connector": display.connector_sys_name,
@@ -41,7 +51,24 @@ def display_payload(display) -> dict[str, Any]:
         "warning": display.warning or "",
         "controllable": display.controllable,
         "features": features,
+        "confirmed": confirmed,
     }
+    if errors:
+        payload["errors"] = errors
+    return payload
+
+
+def change_payload(change) -> dict[str, Any]:
+    payload = {
+        "id": change.display.identity,
+        "name": change.display.name,
+        "feature": NAME_BY_FEATURE[change.feature],
+        "percent": change.state.percent,
+        "confirmed": (change.confirmed or change.state).percent,
+    }
+    if change.error:
+        payload["error"] = change.error
+    return payload
 
 
 class MonitorService:
@@ -51,36 +78,18 @@ class MonitorService:
         self.controller = controller
 
     def list_displays(self) -> list[dict[str, Any]]:
-        return [display_payload(display) for display in self.controller.displays]
+        return [
+            display_payload(display, self.controller) for display in self.controller.displays
+        ]
 
     def set_percent(self, identity: str, feature: str, percent: int) -> list[dict[str, Any]]:
-        changes = self.controller.set_percent(
-            identity, parse_feature(feature), percent, immediate=True
-        )
-        return [
-            {
-                "id": change.display.identity,
-                "name": change.display.name,
-                "feature": NAME_BY_FEATURE[change.feature],
-                "percent": change.state.percent,
-            }
-            for change in changes
-        ]
+        changes = self.controller.set_percent(identity, parse_feature(feature), percent)
+        return [change_payload(change) for change in changes]
 
     def adjust(self, feature: str, delta: int, identity: str = "") -> list[dict[str, Any]]:
         ident = identity or None
-        changes = self.controller.adjust(
-            parse_feature(feature), delta, identity=ident, immediate=True
-        )
-        return [
-            {
-                "id": change.display.identity,
-                "name": change.display.name,
-                "feature": NAME_BY_FEATURE[change.feature],
-                "percent": change.state.percent,
-            }
-            for change in changes
-        ]
+        changes = self.controller.adjust(parse_feature(feature), delta, identity=ident)
+        return [change_payload(change) for change in changes]
 
     def refresh(self) -> list[dict[str, Any]]:
         self.controller.refresh()

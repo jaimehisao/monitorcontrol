@@ -110,7 +110,6 @@ def apply_native_percent(controller: Controller, percent: int) -> int:
             display.identity,
             Feature.BRIGHTNESS,
             percent,
-            immediate=True,
             propagate=False,
         )
         applied += 1
