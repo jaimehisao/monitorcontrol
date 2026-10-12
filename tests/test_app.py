@@ -35,8 +35,8 @@ class AppTests(unittest.TestCase):
         )
 
         with patch("monitorcontrol.app.export_session"), patch(
-            "monitorcontrol.app.own_bus_name"
-        ), patch("monitorcontrol.app.attach_mutter"), patch.object(
+            "monitorcontrol.app.attach_mutter"
+        ), patch.object(
             Application, "run", return_value=0
         ):
             self.assertEqual(run_app(background=True), 0)
@@ -45,8 +45,8 @@ class AppTests(unittest.TestCase):
 
         Adw.init()
         with patch("monitorcontrol.app.export_session"), patch(
-            "monitorcontrol.app.own_bus_name"
-        ), patch("monitorcontrol.app.attach_mutter"):
+            "monitorcontrol.app.attach_mutter"
+        ):
             app = Application(show_window=False, config=Config(step=7, sync=True))
             app.register()
 
@@ -66,6 +66,23 @@ class AppTests(unittest.TestCase):
             scale = next(iter(app.win._scales.values()))
             scale.set_value(40)
             app.do_shutdown()
+
+    def test_background_exits_when_the_session_api_cannot_be_exported(self) -> None:
+        from monitorcontrol.app import Application, run_app
+
+        def fake_run(self, _argv):
+            self.register()
+            self.do_startup()
+            return 0
+
+        with patch.object(Application, "run", fake_run), patch(
+            "monitorcontrol.app.export_session", side_effect=RuntimeError("no bus")
+        ), patch("monitorcontrol.app.attach_mutter"), self.assertLogs(
+            "monitorcontrol.app", level="ERROR"
+        ) as logs:
+            code = run_app(background=True)
+        self.assertEqual(code, 1)
+        self.assertTrue(any("no bus" in line for line in logs.output))
 
 
 if __name__ == "__main__":

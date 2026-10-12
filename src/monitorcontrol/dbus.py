@@ -2,6 +2,14 @@
 
 Methods take/return JSON strings so the GNOME Shell extension and the CLI
 share one parser. `dispatch` is the testable core; Gio export is a thin wrap.
+
+Signals (all one JSON string argument):
+
+- `Changed`: a list of ``{"id", "feature", "percent"}`` records. Emitted once
+  for every controller change, including sync and a rolled-back failed write.
+- `OperationFailed`: the same record plus ``"error"``, for writes the hardware
+  rejected.
+- `DisplaysChanged`: the `ListDisplays` payload after a rescan.
 """
 
 from __future__ import annotations
@@ -40,6 +48,12 @@ INTROSPECTION_XML = f"""
     <signal name="Changed">
       <arg type="s" name="json"/>
     </signal>
+    <signal name="DisplaysChanged">
+      <arg type="s" name="json"/>
+    </signal>
+    <signal name="OperationFailed">
+      <arg type="s" name="json"/>
+    </signal>
   </interface>
 </node>
 """
@@ -59,27 +73,133 @@ def dispatch(service: MonitorService, method: str, args: tuple[Any, ...]) -> str
     raise ValueError(f"unknown method {method}")
 
 
-def changes_payload(changes) -> str:
+def changes_payload(changes, *, include_error: bool = False) -> str:
     from monitorcontrol.service import NAME_BY_FEATURE
 
-    rows = [
-        {
+    rows = []
+    for change in changes:
+        row = {
             "id": change.display.identity,
             "name": change.display.name,
             "feature": NAME_BY_FEATURE.get(change.feature, change.feature.name.lower()),
             "percent": change.state.percent,
         }
-        for change in changes
-    ]
+        if include_error and change.error:
+            row["error"] = change.error
+        rows.append(row)
     return json.dumps(rows)
 
 
-def export_session(service: MonitorService, connection=None) -> tuple[int, object]:
-    """Register the object on a D-Bus connection. Returns the registration id."""
+def loads_changed(payload: str) -> list[dict[str, Any]]:
+    """Records the Shell extension can apply. Malformed entries are skipped."""
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return []
+    rows = data if isinstance(data, list) else [data]
+    cleaned: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        identity = row.get("id")
+        feature = row.get("feature")
+        percent = row.get("percent")
+        if not isinstance(identity, str) or not isinstance(feature, str):
+            continue
+        if isinstance(percent, bool) or not isinstance(percent, int):
+            continue
+        cleaned.append({"id": identity, "feature": feature, "percent": percent})
+    return cleaned
+
+
+def _glib_marshal(fn) -> None:
+    from gi.repository import GLib
+
+    GLib.idle_add(lambda: fn() or False)
+
+
+class SessionExport:
+    """Bus name, object registration, and change signals for one daemon."""
+
+    def __init__(self, service: MonitorService, connection, registration_id: int, owner_id: int, marshal) -> None:
+        self.service = service
+        self.connection = connection
+        self.registration_id = registration_id
+        self.owner_id = owner_id
+        self._marshal = marshal
+        self._closed = False
+
+    def on_changes(self, changes) -> None:
+        if self._closed or not changes:
+            return
+        changed = changes_payload(changes)
+        failed = [change for change in changes if change.error]
+        failed_payload = changes_payload(failed, include_error=True) if failed else None
+
+        def emit() -> None:
+            if self._closed:
+                return
+            self._emit("Changed", changed)
+            if failed_payload is not None:
+                self._emit("OperationFailed", failed_payload)
+
+        self._marshal(emit)
+
+    def on_topology(self, _displays) -> None:
+        if self._closed:
+            return
+        payload = json.dumps(self.service.list_displays())
+
+        def emit() -> None:
+            if not self._closed:
+                self._emit("DisplaysChanged", payload)
+
+        self._marshal(emit)
+
+    def _emit(self, signal: str, payload: str) -> None:
+        from gi.repository import GLib
+
+        self.connection.emit_signal(
+            None,
+            OBJECT_PATH,
+            INTERFACE,
+            signal,
+            GLib.Variant("(s)", (payload,)),
+        )
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        controller = self.service.controller
+        controller.unsubscribe(self.on_changes)
+        controller.unsubscribe(self.on_topology)
+        self.connection.unregister_object(self.registration_id)
+        if self.owner_id:
+            from gi.repository import Gio
+
+            Gio.bus_unown_name(self.owner_id)
+
+
+def export_session(
+    service: MonitorService,
+    connection=None,
+    *,
+    own_name: bool | None = None,
+    marshal=None,
+) -> SessionExport:
+    """Export the session object and keep the registration for shutdown.
+
+    The real session bus is claimed only when the caller does not inject a
+    connection. Tests pass a mock connection and do not own a bus name.
+    """
     from gi.repository import Gio, GLib
 
+    injected = connection is not None
     if connection is None:
         connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    if own_name is None:
+        own_name = not injected
     info = Gio.DBusNodeInfo.new_for_xml(INTROSPECTION_XML)
     iface = info.interfaces[0]
 
@@ -91,17 +211,25 @@ def export_session(service: MonitorService, connection=None) -> tuple[int, objec
             invocation.return_dbus_error(f"{INTERFACE}.Error", str(exc))
 
     registration = connection.register_object(OBJECT_PATH, iface, on_method, None, None)
-
-    def emit_changed(payload: str) -> None:
-        connection.emit_signal(
-            None,
-            OBJECT_PATH,
-            INTERFACE,
-            "Changed",
-            GLib.Variant("(s)", (payload,)),
+    owner_id = 0
+    try:
+        if own_name:
+            owner_id = own_bus_name()
+        session = SessionExport(
+            service,
+            connection,
+            registration,
+            owner_id,
+            marshal or _glib_marshal,
         )
-
-    return registration, emit_changed
+        service.controller.subscribe(session.on_changes)
+        service.controller.subscribe_topology(session.on_topology)
+    except Exception:
+        connection.unregister_object(registration)
+        if owner_id:
+            Gio.bus_unown_name(owner_id)
+        raise
+    return session
 
 
 def own_bus_name(bus_name: str = BUS_NAME) -> int:

@@ -81,7 +81,9 @@ class Indicator extends SystemIndicator {
     applyChanged(payload) {
         const changes = Array.isArray(payload) ? payload : [payload];
         for (const change of changes) {
-            if (change.feature !== 'brightness')
+            if (!change || typeof change.id !== 'string' || change.feature !== 'brightness')
+                continue;
+            if (typeof change.percent !== 'number' || Number.isNaN(change.percent))
                 continue;
             const slider = this._sliders.get(change.id);
             if (slider)

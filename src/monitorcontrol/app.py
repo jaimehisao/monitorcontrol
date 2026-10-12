@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import gi
@@ -17,7 +18,7 @@ from monitorcontrol.backlight import is_internal_connector
 from monitorcontrol.bootstrap import SetupChoice, bootstrap, repair, running_on_gnome
 from monitorcontrol.config import Config, load as load_config
 from monitorcontrol.controller import Controller
-from monitorcontrol.dbus import changes_payload, export_session, own_bus_name
+from monitorcontrol.dbus import export_session
 from monitorcontrol.gnome_backlight import NativeBrightnessFollower, apply_native_percent, attach_mutter
 from monitorcontrol.gnome_extension import enable as enable_extension
 from monitorcontrol.i2c_setup import pkexec_grant
@@ -26,6 +27,8 @@ from monitorcontrol.paths import current_username, install_user_binary
 from monitorcontrol.service import MonitorService
 from monitorcontrol.settings_actions import SettingsActions
 from monitorcontrol.window import ControlWindow
+
+log = logging.getLogger(__name__)
 
 
 def _load_css() -> None:
@@ -57,7 +60,11 @@ class Application(Adw.Application):
         self.osd: Osd | None = None
         self._settings_dialog = None
         self._bootstrapping = False
-        self._emit_changed = None
+        self._session = None
+        self._follower = None
+        self._mutter = None
+        self.integration_errors: list[str] = []
+        self._export_failed = False
 
     def do_startup(self) -> None:
         Adw.Application.do_startup(self)
@@ -67,32 +74,27 @@ class Application(Adw.Application):
         self.controller.refresh()
         self.service = MonitorService(self.controller)
 
-        def publish(changes) -> None:
-            if not changes or self._emit_changed is None:
-                return
-            try:
-                self._emit_changed(changes_payload(changes))
-            except Exception:
-                pass
-
-        self.controller.subscribe(publish)
-        self._emit_changed = None
         try:
-            _registration, emit_changed = export_session(self.service)
-            self._emit_changed = emit_changed
-            own_bus_name()
-        except Exception:
-            pass
-        follower = NativeBrightnessFollower(
+            self._session = export_session(self.service)
+        except Exception as exc:
+            log.exception("session API was not exported")
+            self.integration_errors.append(f"Session API unavailable: {exc}")
+            if not self._show_window:
+                self._export_failed = True
+                GLib.idle_add(self.quit)
+        self._follower = NativeBrightnessFollower(
             lambda percent: apply_native_percent(self.controller, percent)
         )
         try:
-            attach_mutter(follower)
-        except Exception:
-            pass
+            self._mutter = attach_mutter(self._follower)
+        except Exception as exc:
+            log.exception("GNOME brightness follow failed")
+            self.integration_errors.append(f"GNOME brightness follow unavailable: {exc}")
 
     def do_activate(self) -> None:
         self._ensure_window()
+        if self.win is not None and self.integration_errors:
+            self.win.set_notice(" ".join(self.integration_errors))
         if self._show_window and self.win is not None:
             self.win.present()
             if self.config.setup_complete and not self._bootstrapping:
@@ -202,6 +204,14 @@ class Application(Adw.Application):
         self._settings_dialog.present(self.win)
 
     def do_shutdown(self) -> None:
+        if self._mutter is not None and self._follower is not None:
+            handler = getattr(self._follower, "handler_id", None)
+            if handler is not None:
+                self._mutter.disconnect(handler)
+            self._mutter = None
+        if self._session is not None:
+            self._session.close()
+            self._session = None
         if self.controller is not None:
             self.controller.close()
             self.controller = None
@@ -211,4 +221,7 @@ class Application(Adw.Application):
 def run_app(*, background: bool = False, config_path: Path | None = None) -> int:
     config = load_config(config_path) if config_path is not None else load_config()
     app = Application(show_window=not background, config=config)
-    return app.run(["monitorcontrol"])
+    status = app.run(["monitorcontrol"])
+    if app._export_failed:
+        return 1
+    return status
