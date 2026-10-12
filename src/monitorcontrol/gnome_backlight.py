@@ -145,6 +145,6 @@ def attach_mutter(follower: NativeBrightnessFollower, proxy=None):
             return
         follower.handle(proxy.get_cached_property("Backlight"))
 
-    proxy.connect("g-properties-changed", on_changed)
+    follower.handler_id = proxy.connect("g-properties-changed", on_changed)
     follower.handle(proxy.get_cached_property("Backlight"))
     return proxy

@@ -20,6 +20,8 @@ class ExtensionInstallTests(unittest.TestCase):
             self.assertIn("50", meta["shell-version"])
             js = (dest / "extension.js").read_text(encoding="utf-8")
             self.assertIn("QuickSlider", js)
+            self.assertIn("typeof change.id", js)
+            self.assertIn("typeof change.percent", js)
             self.assertIn("addExternalIndicator", js)
             self.assertNotIn("XF86MonBrightnessUp", js)
             install(root)  # replace existing

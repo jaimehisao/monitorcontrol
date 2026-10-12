@@ -285,9 +285,20 @@ class Controller:
         self._generations: dict[tuple[str, Feature], int] = {}
         self._lock = threading.Lock()
         self._listeners: list[Callable[[list[Change]], None]] = []
+        self._topology: list[Callable[[list[Display]], None]] = []
 
     def subscribe(self, fn: Callable[[list[Change]], None]) -> None:
         self._listeners.append(fn)
+
+    def subscribe_topology(self, fn: Callable[[list[Display]], None]) -> None:
+        self._topology.append(fn)
+
+    def unsubscribe(self, fn: Callable[..., None]) -> None:
+        for bucket in (self._listeners, self._topology):
+            try:
+                bucket.remove(fn)  # type: ignore[arg-type]
+            except ValueError:
+                pass
 
     def _notify(self, changes: list[Change]) -> None:
         if not changes:
@@ -387,7 +398,18 @@ class Controller:
             result = list(self.displays)
         if restored:
             self._notify(restored)
+        self._notify_topology()
         return result
+
+    def _notify_topology(self) -> None:
+        displays = list(self.displays)
+        for fn in list(self._topology):
+            try:
+                fn(displays)
+            except Exception as exc:
+                log.exception("topology listener failed")
+                if displays:
+                    self._capture(displays[0].identity, exc)
 
     def flush(self) -> None:
         """Write coalesced pending values now."""

@@ -36,6 +36,8 @@ class ControlWindow(Adw.ApplicationWindow):
         self._scales: dict[tuple[str, Feature], Gtk.Scale] = {}
         self._percent_labels: dict[tuple[str, Feature], Gtk.Label] = {}
         self._updating = False
+        self._notice: str | None = None
+        self.controller.subscribe(self.apply_changes)
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -96,7 +98,7 @@ class ControlWindow(Adw.ApplicationWindow):
         while child := self._list.get_first_child():
             self._list.remove(child)
 
-        message = permission_message()
+        message = self._notice or permission_message()
         if message:
             self._banner.set_title(message)
             self._banner.set_revealed(True)
@@ -157,28 +159,35 @@ class ControlWindow(Adw.ApplicationWindow):
         self._percent_labels[key] = percent_label
         return row
 
-    def _on_scale(self, scale: Gtk.Scale, display: Display, feature: Feature) -> None:
-        if self._updating:
-            return
-        percent = int(round(scale.get_value()))
-        changes = self.controller.set_percent(
-            display.identity, feature, percent, notify=False
-        )
+    def set_notice(self, text: str | None) -> None:
+        self._notice = text or None
+        if self._notice:
+            self._banner.set_title(self._notice)
+            self._banner.set_revealed(True)
+        else:
+            self.rebuild()
+
+    def apply_changes(self, changes) -> None:
+        """Move sliders to match an external change without writing it back."""
         self._updating = True
         try:
             for change in changes:
                 key = (change.display.identity, change.feature)
+                scale = self._scales.get(key)
                 label = self._percent_labels.get(key)
-                other = self._scales.get(key)
+                percent = change.state.percent
+                if scale is not None and int(round(scale.get_value())) != percent:
+                    scale.set_value(percent)
                 if label is not None:
-                    label.set_text(f"{change.state.percent}%")
-                if other is not None and other is not scale:
-                    other.set_value(change.state.percent)
-            key = (display.identity, feature)
-            if key in self._percent_labels:
-                self._percent_labels[key].set_text(f"{percent}%")
+                    label.set_text(f"{percent}%")
         finally:
             self._updating = False
+
+    def _on_scale(self, scale: Gtk.Scale, display: Display, feature: Feature) -> None:
+        if self._updating:
+            return
+        percent = int(round(scale.get_value()))
+        self.controller.set_percent(display.identity, feature, percent)
 
     def _on_sync(self, row: Adw.SwitchRow, _pspec: object) -> None:
         enabled = bool(row.get_active())

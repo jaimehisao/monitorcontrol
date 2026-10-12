@@ -58,8 +58,23 @@ class WindowSmokeTests(unittest.TestCase):
         window.on_setup = lambda: called.append("setup")
         window._on_banner(window._banner)
         self.assertIn("setup", called)
+        window.set_notice("Session API unavailable: no bus")
+        self.assertIn("Session API", window._banner.get_title())
+        writes: list[int] = []
+        tracked = _display()
+        tracked._set = lambda _feature, value: writes.append(value)
+        tracked_controller = Controller(discover_fn=lambda: [tracked])
+        tracked_controller.refresh()
+        tracked_window = ControlWindow(app, tracked_controller)
+        scale = tracked_window._scales[(tracked.identity, Feature.BRIGHTNESS)]
+        tracked_controller.set_percent(tracked.identity, Feature.BRIGHTNESS, 60, propagate=False)
+        self.assertEqual(int(round(scale.get_value())), 60)
+        tracked_controller.flush()
+        self.assertEqual(writes, [60])
+        tracked_controller.close()
         window.destroy()
         window2.destroy()
+        tracked_window.destroy()
 
 
 if __name__ == "__main__":
