@@ -1,6 +1,5 @@
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {QuickSlider, SystemIndicator} from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
@@ -37,6 +36,7 @@ class BrightnessSlider extends QuickSlider {
         this._updating = false;
         const percent = (display.features && display.features.brightness) || 0;
         this.slider.value = percent / 100.0;
+        this.slider.accessible_name = display.name;
         this.accessible_name = display.name;
         this.slider.connect('notify::value', () => {
             if (this._updating)
@@ -59,6 +59,9 @@ class Indicator extends SystemIndicator {
         super._init();
         this._sliders = new Map();
         this._proxy = null;
+        this._icon = this._addIndicator();
+        this._icon.icon_name = 'display-brightness-symbolic';
+        this._icon.visible = false;
     }
 
     setProxy(proxy) {
@@ -75,7 +78,9 @@ class Indicator extends SystemIndicator {
             const slider = new BrightnessSlider(display, this._proxy);
             this.quickSettingsItems.push(slider);
             this._sliders.set(display.id, slider);
+            this._insertItem(slider);
         }
+        this._icon.visible = rows.length > 0;
     }
 
     applyChanged(payload) {
@@ -88,12 +93,21 @@ class Indicator extends SystemIndicator {
                 slider.setPercent(change.percent);
         }
     }
+
+    _insertItem(item) {
+        const qs = Main.panel.statusArea.quickSettings;
+        const sibling = qs._backgroundApps?.quickSettingsItems?.at(-1) ?? null;
+        if (typeof qs._addItemsBefore === 'function')
+            qs._addItemsBefore([item], sibling, 2);
+        else
+            qs.menu.insertItemBefore(item, sibling, 2);
+    }
 });
 
 export default class MonitorControlExtension extends Extension {
     enable() {
         this._indicator = new Indicator();
-        Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
+        Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator, 2);
         this._watch = Gio.bus_watch_name(
             Gio.BusType.SESSION,
             BUS_NAME,
