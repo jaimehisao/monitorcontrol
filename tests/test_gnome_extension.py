@@ -21,6 +21,9 @@ class ExtensionInstallTests(unittest.TestCase):
             js = (dest / "extension.js").read_text(encoding="utf-8")
             self.assertIn("QuickSlider", js)
             self.assertIn("addExternalIndicator", js)
+            self.assertIn("_addIndicator", js)
+            self.assertIn("_insertItem", js)
+            self.assertIn("_addItemsBefore", js)
             self.assertNotIn("XF86MonBrightnessUp", js)
             install(root)  # replace existing
             self.assertTrue(uninstall(root))
